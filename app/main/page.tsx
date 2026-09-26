@@ -6,6 +6,15 @@ import Link from 'next/link';
 // === แก้ไข Path ตรงนี้ให้ตรงกับโครงสร้างโฟลเดอร์เป๊ะๆ ===
 import ResultModal from '../components/ResultModal'; 
 
+type UserProfile = {
+  name: string;
+  avatar: string;
+  institution?: string;
+  major?: string;
+  bio?: string;
+  githubLink?: string;
+};
+
 const PORTFOLIO_FILES = [
   { id: 1, title: 'Certificate_AWS.jpg', date: 'Aug 15, 2024', analyzedAt: '15 ส.ค. 2567, 10:30 น.', skills: 'พบ 12 ทักษะ', imageUrl: 'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?q=80&w=800&auto=format&fit=crop', type: 'JPG' },
   { id: 2, title: 'Transcript_2024.pdf', date: 'Jul 22, 2024', analyzedAt: '22 ก.ค. 2567, 14:45 น.', skills: 'พบ 8 ทักษะ', imageUrl: 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?q=80&w=800&auto=format&fit=crop', type: 'PDF' },
@@ -21,13 +30,14 @@ export default function PortfolioStorage() {
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [showResultModal, setShowResultModal] = useState(false);
   const [isHistoryDropdownOpen, setIsHistoryDropdownOpen] = useState(false);
+  const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
 
   const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
   const [selectedModalFiles, setSelectedModalFiles] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // === State สำหรับเก็บข้อมูล User ===
-  const [userProfile, setUserProfile] = useState({ name: 'User', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150' });
+  const [userProfile, setUserProfile] = useState<UserProfile>({ name: 'User', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150' });
 
   // โหลดข้อมูล User ทันทีที่เปิดหน้าต่างนี้
   useEffect(() => {
@@ -40,8 +50,12 @@ export default function PortfolioStorage() {
   // ดักคลิกพื้นที่อื่นเพื่อปิด Dropdown
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (!(event.target as Element).closest('#history-dropdown-container')) {
+      const target = event.target as Element;
+      if (!target.closest('#history-dropdown-container')) {
         setIsHistoryDropdownOpen(false);
+      }
+      if (!target.closest('#profile-dropdown-container')) {
+        setIsProfileDropdownOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -235,16 +249,64 @@ export default function PortfolioStorage() {
             </div>
 
             {/* === ดึงรูป User จาก State มาแสดงตรงนี้ === */}
-            <div className="flex items-center gap-3">
-              <span className="hidden sm:block text-sm font-bold text-slate-800">{userProfile.name}</span>
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden border-2 border-slate-200 shadow-sm cursor-pointer hover:border-blue-400 transition-colors flex-shrink-0 bg-slate-100">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img 
-                  src={userProfile.avatar} 
-                  alt="User Profile" 
-                  className="w-full h-full object-cover" 
-                />
-              </div>
+            <div id="profile-dropdown-container" className="relative">
+              <button
+                type="button"
+                onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
+                className="flex items-center gap-3"
+              >
+                <span className="hidden sm:block text-sm font-bold text-slate-800">{userProfile.name}</span>
+                <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden border-2 shadow-sm cursor-pointer transition-colors flex-shrink-0 bg-slate-100 ${isProfileDropdownOpen ? 'border-blue-500' : 'border-slate-200 hover:border-blue-400'}`}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img 
+                    src={userProfile.avatar} 
+                    alt="User Profile" 
+                    className="w-full h-full object-cover" 
+                  />
+                </div>
+              </button>
+
+              {isProfileDropdownOpen && (
+                <div className="absolute right-0 mt-4 w-80 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
+                  <div className="bg-slate-50 border-b border-slate-100 px-4 py-3 flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-full overflow-hidden border border-slate-200 flex-shrink-0 bg-white">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={userProfile.avatar} alt="User Profile" className="w-full h-full object-cover" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-extrabold text-slate-800 text-sm truncate">{userProfile.name}</p>
+                      <p className="text-xs font-medium text-slate-400 truncate">ข้อมูลที่กรอกไว้ตอนสร้างโปรไฟล์</p>
+                    </div>
+                  </div>
+
+                  <div className="px-4 py-3 space-y-3">
+                    <div>
+                      <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wide">มหาวิทยาลัย / สถานศึกษา</p>
+                      <p className="text-sm font-bold text-slate-800">{userProfile.institution || 'ยังไม่ได้กรอก'}</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wide">คณะ / สาขาวิชา</p>
+                      <p className="text-sm font-bold text-slate-800">{userProfile.major || 'ยังไม่ได้กรอก'}</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wide">Bio</p>
+                      <p className="text-sm font-medium text-slate-700 whitespace-pre-line">{userProfile.bio || 'ยังไม่ได้กรอก'}</p>
+                    </div>
+                    {userProfile.githubLink && (
+                      <div>
+                        <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wide">GitHub</p>
+                        <a href={userProfile.githubLink} target="_blank" rel="noreferrer" className="text-sm font-bold text-blue-600 hover:underline break-all">{userProfile.githubLink}</a>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="border-t border-slate-100 p-3">
+                    <Link href="/setup" className="block w-full text-center px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-bold text-sm transition-colors">
+                      แก้ไขโปรไฟล์
+                    </Link>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

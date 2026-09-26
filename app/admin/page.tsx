@@ -30,6 +30,22 @@ const STUDENTS: StudentRow[] = [
   { id: 'STU-1012', name: 'Somchai Wongdee', email: 'somchai.w@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'ความมั่นคงปลอดภัยไซเบอร์', latestUpload: 'Jul 30, 2026', career: 'Cybersecurity Analyst', files: 6, skills: ['Pentest', 'Python', 'Forensics'], status: 'analyzed' },
 ];
 
+type PortfolioFile = {
+  name: string;
+  kind: string;
+  hue: number;
+};
+
+const FILE_KINDS = ['UI Design', 'Certificate', 'Project Screenshot', 'Poster', 'Report', 'Prototype', 'Award', 'Mockup', 'Diagram'];
+
+function portfolioOf(row: StudentRow): PortfolioFile[] {
+  return Array.from({ length: row.files }, (_, index) => ({
+    name: `${row.id.toLowerCase()}-portfolio-${String(index + 1).padStart(2, '0')}.png`,
+    kind: FILE_KINDS[index % FILE_KINDS.length],
+    hue: (index * 47 + row.id.charCodeAt(row.id.length - 1) * 13) % 360,
+  }));
+}
+
 const CAREER_ORDER = ['Software Engineer', 'Data Scientist', 'UX Designer', 'Cybersecurity Analyst', 'Marketing Strategist', 'Finance Analyst'];
 
 const PAGE_SIZE = 7;
@@ -42,6 +58,7 @@ export default function AdminDashboard() {
   const [page, setPage] = useState(1);
   const [viewing, setViewing] = useState<StudentRow | null>(null);
   const [deleting, setDeleting] = useState<StudentRow | null>(null);
+  const [preview, setPreview] = useState<PortfolioFile | null>(null);
 
   const filtered = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -288,11 +305,47 @@ export default function AdminDashboard() {
                   ))}
                 </div>
               </div>
+              <div>
+                <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wide mb-2">ผลงานที่ AI วิเคราะห์ ({viewing.files} ไฟล์)</p>
+                <div className="grid grid-cols-3 gap-3 max-h-60 overflow-y-auto pr-1">
+                  {portfolioOf(viewing).map((file) => (
+                    <button
+                      key={file.name}
+                      onClick={() => setPreview(file)}
+                      className="group text-left rounded-xl overflow-hidden border border-slate-100 hover:border-blue-300 hover:shadow-md transition-all"
+                    >
+                      <PortfolioThumb file={file} className="h-20" />
+                      <p className="text-[10px] font-bold text-slate-500 px-2 py-1.5 truncate group-hover:text-blue-600">{file.kind}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className="px-6 py-4 border-t border-slate-100 flex justify-end">
               <button onClick={() => setViewing(null)} className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-full font-bold text-sm transition-colors">ปิด</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= IMAGE PREVIEW ================= */}
+      {preview && (
+        <div
+          onClick={() => setPreview(null)}
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm"
+        >
+          <div onClick={(event) => event.stopPropagation()} className="bg-white w-full max-w-xl rounded-[2rem] shadow-2xl overflow-hidden">
+            <div className="flex items-start justify-between gap-4 px-6 py-4 border-b border-slate-100">
+              <div className="min-w-0">
+                <h3 className="text-base font-extrabold text-slate-800 truncate">{preview.kind}</h3>
+                <p className="text-xs font-medium text-slate-400 truncate">{preview.name}</p>
+              </div>
+              <button onClick={() => setPreview(null)} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <PortfolioThumb file={preview} className="h-72" large />
           </div>
         </div>
       )}
@@ -341,6 +394,20 @@ function StatCard({ label, value, hint, tone }: { label: string; value: string; 
         <p className="text-2xl font-extrabold text-slate-800 truncate">{value}</p>
         <p className="text-[11px] font-medium text-slate-400 truncate">{hint}</p>
       </div>
+    </div>
+  );
+}
+
+function PortfolioThumb({ file, className, large }: { file: PortfolioFile; className: string; large?: boolean }) {
+  return (
+    <div
+      className={`w-full flex flex-col items-center justify-center gap-1 ${className}`}
+      style={{ background: `linear-gradient(135deg, hsl(${file.hue} 85% 92%), hsl(${(file.hue + 40) % 360} 85% 80%))` }}
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke={`hsl(${file.hue} 60% 35%)`} className={large ? 'w-14 h-14' : 'w-7 h-7'}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M18 9h.008v.008H18V9zm2.25 9.75H3.75A2.25 2.25 0 011.5 16.5V7.5a2.25 2.25 0 012.25-2.25h16.5A2.25 2.25 0 0122.5 7.5v9a2.25 2.25 0 01-2.25 2.25z" />
+      </svg>
+      {large && <p className="text-sm font-extrabold" style={{ color: `hsl(${file.hue} 60% 30%)` }}>{file.kind}</p>}
     </div>
   );
 }

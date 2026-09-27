@@ -18,3 +18,13 @@ drop policy if exists "analysis_select_own" on public.analysis_results;
 drop policy if exists "analysis_select_all_auth" on public.analysis_results;
 create policy "analysis_select_all_auth" on public.analysis_results
   for select to authenticated using (true);
+
+-- profiles: authenticated แก้ไข/ลบได้ทั้งหมด (แอดมินจัดการข้อมูลนักศึกษา; ต้นแบบ)
+drop policy if exists "profiles_update_own" on public.profiles;
+drop policy if exists "profiles_update_all_auth" on public.profiles;
+create policy "profiles_update_all_auth" on public.profiles
+  for update to authenticated using (true) with check (true);
+
+drop policy if exists "profiles_delete_all_auth" on public.profiles;
+create policy "profiles_delete_all_auth" on public.profiles
+  for delete to authenticated using (true);

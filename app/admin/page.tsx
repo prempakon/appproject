@@ -76,6 +76,49 @@ export default function AdminDashboard() {
   const [page, setPage] = useState(1);
   const [viewing, setViewing] = useState<StudentRow | null>(null);
   const [deleting, setDeleting] = useState<StudentRow | null>(null);
+  const [editing, setEditing] = useState<StudentRow | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', institution: '', major: '', role: 'student' });
+  const [editBusy, setEditBusy] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  const openEdit = (row: StudentRow) => {
+    setViewing(null);
+    setEditForm({
+      name: row.name,
+      institution: row.institution,
+      major: row.major === '-' ? '' : row.major,
+      role: row.email === 'admin@lru.ac.th' || row.email === 'superadmin@lru.ac.th' ? 'admin' : 'student',
+    });
+    setEditError(null);
+    setEditing(row);
+  };
+
+  const saveEdit = async () => {
+    if (!editing) return;
+    if (!editForm.name.trim()) {
+      setEditError('กรุณากรอกชื่อ-นามสกุล');
+      return;
+    }
+    setEditBusy(true);
+    setEditError(null);
+    try {
+      const { adminUpdateProfile } = await import('../../lib/profiles');
+      await adminUpdateProfile(editing.userId, {
+        name: editForm.name.trim(),
+        institution: editForm.institution.trim() || 'มหาวิทยาลัยราชภัฏเลย',
+        major: editForm.major.trim() || '-',
+        role: editForm.role as 'student' | 'admin',
+      });
+      setRows((prev) => prev.map((r) => r.id === editing.id
+        ? { ...r, name: editForm.name.trim(), institution: editForm.institution.trim() || 'มหาวิทยาลัยราชภัฏเลย', major: editForm.major.trim() || '-' }
+        : r));
+      setEditing(null);
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'บันทึกไม่สำเร็จ');
+    } finally {
+      setEditBusy(false);
+    }
+  };
 
   const filtered = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -260,6 +303,11 @@ export default function AdminDashboard() {
                           <button onClick={() => setViewing(row)} className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-bold transition-colors active:scale-95">
                             ดูข้อมูล
                           </button>
+                          <button onClick={() => openEdit(row)} aria-label={`แก้ไข ${row.name}`} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+                            </svg>
+                          </button>
                           <button onClick={() => setDeleting(row)} aria-label={`ลบ ${row.name}`} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
                               <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
@@ -359,8 +407,67 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            <div className="px-6 py-4 border-t border-slate-100 flex justify-end">
-              <button onClick={() => setViewing(null)} className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-full font-bold text-sm transition-colors">ปิด</button>
+            <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3">
+              <button onClick={() => viewing && openEdit(viewing)} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-bold text-sm transition-colors">แก้ไขข้อมูล</button>
+              <button onClick={() => setViewing(null)} className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full font-bold text-sm transition-colors">ปิด</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= EDIT MODAL ================= */}
+      {editing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-md rounded-[2rem] shadow-[0_32px_80px_-24px_rgba(15,23,42,0.3)] overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-100">
+              <h3 className="text-lg font-extrabold tracking-tight text-slate-800">แก้ไขข้อมูลนักศึกษา</h3>
+              <p className="text-xs font-medium text-slate-400 mt-0.5">{editing.id} · {editing.email}</p>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider">ชื่อ-นามสกุล</label>
+                <input
+                  type="text" value={editForm.name} onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))}
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none text-sm text-slate-800 font-medium"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider">มหาวิทยาลัย / สถานศึกษา</label>
+                <input
+                  type="text" value={editForm.institution} onChange={(e) => setEditForm((p) => ({ ...p, institution: e.target.value }))}
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none text-sm text-slate-800 font-medium"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider">สาขาวิชา</label>
+                  <input
+                    type="text" value={editForm.major} onChange={(e) => setEditForm((p) => ({ ...p, major: e.target.value }))}
+                    className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none text-sm text-slate-800 font-medium"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider">สิทธิ์</label>
+                  <select
+                    value={editForm.role} onChange={(e) => setEditForm((p) => ({ ...p, role: e.target.value }))}
+                    className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none text-sm text-slate-800 font-medium"
+                  >
+                    <option value="student">นักศึกษา</option>
+                    <option value="admin">แอดมิน</option>
+                  </select>
+                </div>
+              </div>
+              {editError && (
+                <p className="text-xs font-bold text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">⚠ {editError}</p>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-100 flex gap-3">
+              <button onClick={() => setEditing(null)} disabled={editBusy} className="flex-1 py-2.5 rounded-full border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 transition-colors disabled:opacity-50">ยกเลิก</button>
+              <button onClick={saveEdit} disabled={editBusy} className="flex-1 py-2.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm transition-colors disabled:opacity-60">
+                {editBusy ? 'กำลังบันทึก...' : 'บันทึก'}
+              </button>
             </div>
           </div>
         </div>

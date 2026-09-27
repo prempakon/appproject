@@ -53,6 +53,16 @@ export async function deleteProfileForAdmin(userId: string) {
   if (error) throw error;
 }
 
+export async function adminUpdateProfile(userId: string, patch: {
+  name: string;
+  institution: string;
+  major: string;
+  role: 'student' | 'admin';
+}) {
+  const { error } = await supabase.from('profiles').update(patch).eq('id', userId);
+  if (error) throw error;
+}
+
 export interface MyPortfolioRow {
   id: string;
   title: string;

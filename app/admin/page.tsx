@@ -4,6 +4,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
 type RealFile = {
+  id: string;
   title: string;
   file_url: string;
   file_type: string;
@@ -43,6 +44,7 @@ export default function AdminDashboard() {
       try {
         const { listProfilesForAdmin } = await import('../../lib/profiles');
         const { profiles, portfolios, analyses } = await listProfilesForAdmin();
+        setAnalyzedIds(analyses.map((a) => a.portfolio_id));
         const mapped: StudentRow[] = profiles.map((p) => {
           const files = portfolios.filter((f) => f.user_id === p.id);
           const latest = analyses.find((a) => a.user_id === p.id) ?? null;
@@ -58,7 +60,7 @@ export default function AdminDashboard() {
             files: files.length,
             skills: latest?.skills ?? [],
             status: latest ? 'analyzed' : 'pending',
-            realFiles: files.map((f) => ({ title: f.title, file_url: f.file_url, file_type: f.file_type, created_at: f.created_at })),
+            realFiles: files.map((f) => ({ id: f.id, title: f.title, file_url: f.file_url, file_type: f.file_type, created_at: f.created_at })),
           };
         });
         setRows(mapped);
@@ -69,6 +71,7 @@ export default function AdminDashboard() {
   }, [router]);
 
   const [rows, setRows] = useState<StudentRow[]>([]);
+  const [analyzedIds, setAnalyzedIds] = useState<string[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [careerFilter, setCareerFilter] = useState('all');
@@ -149,7 +152,11 @@ export default function AdminDashboard() {
   }, [rows]);
 
   const analyzedCount = rows.filter((row) => row.status === 'analyzed').length;
-  const portfolioCount = rows.reduce((sum, row) => sum + row.files, 0);
+  const totalFiles = rows.reduce((sum, row) => sum + row.files, 0);
+  const analyzedFiles = rows.reduce(
+    (sum, row) => sum + row.realFiles.filter((f) => analyzedIds.includes(f.id)).length,
+    0,
+  );
 
   const resetFilters = () => {
     setSearch('');
@@ -197,8 +204,8 @@ export default function AdminDashboard() {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="space-y-4">
-              <StatCard label="จำนวนนักศึกษาทั้งหมด" value={rows.length.toLocaleString()} hint={`${analyzedCount} วิเคราะห์แล้ว / ${rows.length - analyzedCount} รอวิเคราะห์`} tone="blue" />
-              <StatCard label="พอร์ตโฟลิโอที่วิเคราะห์แล้ว" value={portfolioCount.toLocaleString()} hint="รวมไฟล์ที่ผ่านการวิเคราะห์ทั้งระบบ" tone="green" />
+              <StatCard label="จำนวนนักศึกษาทั้งหมด" value={rows.length.toLocaleString()} hint={`${analyzedCount} วิเคราะห์แล้ว / ${rows.length - analyzedCount} ยังไม่วิเคราะห์`} tone="blue" />
+              <StatCard label="พอร์ตโฟลิโอที่วิเคราะห์แล้ว" value={analyzedFiles.toLocaleString()} hint={`จากไฟล์ทั้งหมด ${totalFiles.toLocaleString()} ไฟล์`} tone="green" />
               <StatCard label="ทักษะยอดนิยมสูงสุด" value={topSkill} hint="ทักษะที่พบบ่อยที่สุดจากพอร์ตโฟลิโอ" tone="amber" />
             </div>
 
@@ -391,6 +398,7 @@ export default function AdminDashboard() {
                   <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                     {viewing.realFiles.map((file) => {
                       const isImage = /^(JPG|JPEG|PNG|GIF|WEBP)$/i.test(file.file_type);
+                      const isAnalyzed = analyzedIds.includes(file.id);
                       return (
                         <button
                           key={file.file_url}
@@ -407,8 +415,13 @@ export default function AdminDashboard() {
                           )}
                           <span className="min-w-0 flex-grow">
                             <span className="block text-xs font-bold text-slate-700 truncate">{file.title}</span>
-                            <span className="block text-[10px] font-medium text-slate-400">
-                              {new Date(file.created_at).toLocaleDateString('th-TH')} · {isImage ? 'แตะเพื่อดูรูป' : file.file_type}
+                            <span className="mt-1 flex items-center gap-1.5">
+                              <span className="block text-[10px] font-medium text-slate-400">
+                                {new Date(file.created_at).toLocaleDateString('th-TH')} · {isImage ? 'แตะเพื่อดูรูป' : file.file_type}
+                              </span>
+                              <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${isAnalyzed ? 'text-emerald-700 bg-emerald-50' : 'text-amber-700 bg-amber-50'}`}>
+                                {isAnalyzed ? 'วิเคราะห์แล้ว' : 'ยังไม่วิเคราะห์'}
+                              </span>
                             </span>
                           </span>
                         </button>

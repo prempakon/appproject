@@ -76,6 +76,7 @@ export default function AdminDashboard() {
   const [page, setPage] = useState(1);
   const [viewing, setViewing] = useState<StudentRow | null>(null);
   const [deleting, setDeleting] = useState<StudentRow | null>(null);
+  const [previewFile, setPreviewFile] = useState<RealFile | null>(null);
   const [editing, setEditing] = useState<StudentRow | null>(null);
   const [editForm, setEditForm] = useState({ name: '', institution: '', major: '', role: 'student' });
   const [editBusy, setEditBusy] = useState(false);
@@ -388,18 +389,31 @@ export default function AdminDashboard() {
                 <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wide mb-2">ผลงานที่อัปโหลด ({viewing.files} ไฟล์)</p>
                 {viewing.realFiles.length > 0 ? (
                   <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                    {viewing.realFiles.map((file) => (
-                      <a
-                        key={file.file_url}
-                        href={file.file_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 hover:border-blue-300 px-3 py-2 transition-all"
-                      >
-                        <span className="text-xs font-bold text-slate-700 truncate">{file.title}</span>
-                        <span className="text-[10px] font-extrabold text-slate-400 flex-shrink-0">{file.file_type}</span>
-                      </a>
-                    ))}
+                    {viewing.realFiles.map((file) => {
+                      const isImage = /^(JPG|JPEG|PNG|GIF|WEBP)$/i.test(file.file_type);
+                      return (
+                        <button
+                          key={file.file_url}
+                          onClick={() => isImage && setPreviewFile(file)}
+                          className="w-full flex items-center gap-3 rounded-xl border border-slate-100 hover:border-blue-300 px-2.5 py-2 transition-all text-left"
+                        >
+                          {isImage ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={file.file_url} alt={file.title} className="w-14 h-14 rounded-lg object-cover flex-shrink-0 bg-slate-100" />
+                          ) : (
+                            <span className="w-14 h-14 rounded-lg bg-slate-100 text-slate-400 text-[10px] font-extrabold flex items-center justify-center flex-shrink-0">
+                              {file.file_type}
+                            </span>
+                          )}
+                          <span className="min-w-0 flex-grow">
+                            <span className="block text-xs font-bold text-slate-700 truncate">{file.title}</span>
+                            <span className="block text-[10px] font-medium text-slate-400">
+                              {new Date(file.created_at).toLocaleDateString('th-TH')} · {isImage ? 'แตะเพื่อดูรูป' : file.file_type}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="text-xs font-medium text-slate-400">ยังไม่มีไฟล์</p>
@@ -468,6 +482,35 @@ export default function AdminDashboard() {
               <button onClick={saveEdit} disabled={editBusy} className="flex-1 py-2.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm transition-colors disabled:opacity-60">
                 {editBusy ? 'กำลังบันทึก...' : 'บันทึก'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= FILE PREVIEW ================= */}
+      {previewFile && (
+        <div
+          onClick={() => setPreviewFile(null)}
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm"
+        >
+          <div onClick={(event) => event.stopPropagation()} className="bg-white w-full max-w-xl rounded-[2rem] shadow-[0_32px_80px_-24px_rgba(0,0,0,0.5)] overflow-hidden">
+            <div className="flex items-start justify-between gap-4 px-6 py-4 border-b border-slate-100">
+              <div className="min-w-0">
+                <h3 className="text-base font-extrabold tracking-tight text-slate-800 truncate">{previewFile.title}</h3>
+                <p className="text-xs font-medium text-slate-400">
+                  {new Date(previewFile.created_at).toLocaleDateString('th-TH')} · {previewFile.file_type}
+                </p>
+              </div>
+              <button onClick={() => setPreviewFile(null)} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={previewFile.file_url} alt={previewFile.title} className="w-full max-h-[70vh] object-contain bg-slate-950" />
+            <div className="px-6 py-4 border-t border-slate-100 flex justify-end">
+              <a href={previewFile.file_url} target="_blank" rel="noreferrer" className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-bold text-sm transition-colors">
+                เปิดไฟล์ต้นฉบับ
+              </a>
             </div>
           </div>
         </div>

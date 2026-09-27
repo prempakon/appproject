@@ -2,43 +2,88 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { signInReal, signInWithGoogleReal } from '../lib/auth';
+import { getMyProfile } from '../lib/profiles';
+import { resolveRole } from '../lib/database.types';
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [busy, setBusy] = useState(false);
   const [showGoogleModal, setShowGoogleModal] = useState(false);
   const router = useRouter();
 
-  // กำหนดอีเมลที่มีสิทธิ์เป็นแอดมิน
-  const ADMIN_EMAILS = ['admin@lru.ac.th', 'superadmin@lru.ac.th'];
+  const saveLocalSession = (cleanEmail: string, role: 'admin' | 'student', name?: string, avatar?: string) => {
+    localStorage.setItem('userRole', role);
+    localStorage.setItem('userEmail', cleanEmail);
+    if (role === 'student') {
+      localStorage.setItem('userProfile', JSON.stringify({
+        name: name || cleanEmail.split('@')[0] || 'นักศึกษา LRU',
+        avatar: avatar || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150',
+        email: cleanEmail
+      }));
+    }
+  };
 
   const processLogin = (userEmail: string) => {
     const cleanEmail = userEmail.trim().toLowerCase();
-    
-    if (ADMIN_EMAILS.includes(cleanEmail)) {
+    const role = resolveRole(cleanEmail);
+    if (role === 'admin') {
       // ถ้าเป็นแอดมิน ไปหน้าแดชบอร์ด
-      localStorage.setItem('userRole', 'admin');
-      localStorage.setItem('userEmail', cleanEmail);
+      saveLocalSession(cleanEmail, 'admin');
       router.push('/admin');
     } else {
       // ถ้ามีบัญชีอยู่แล้ว (ผู้ใช้ทั่วไป) ให้พุ่งตรงไปหน้าหลัก /main ทันที
-      localStorage.setItem('userRole', 'student');
-      localStorage.setItem('userEmail', cleanEmail);
-      
-      // บันทึก Mock Profile เริ่มต้นไว้เผื่อหน้า Main ดึงไปโชว์
-      localStorage.setItem('userProfile', JSON.stringify({
-        name: cleanEmail.split('@')[0] || 'นักศึกษา LRU',
-        avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150',
-        email: cleanEmail
-      }));
-
+      saveLocalSession(cleanEmail, 'student');
       router.push('/main');
     }
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    processLogin(email);
+    setAuthError('');
+    setBusy(true);
+    try {
+      // ทางจริง: Supabase Auth + profiles
+      const { user } = await signInReal(email.trim(), password);
+      if (user) {
+        try {
+          const profile = await getMyProfile(user.id);
+          const role = (profile?.role as 'admin' | 'student') ?? resolveRole(user.email ?? email);
+          saveLocalSession((user.email ?? email).toLowerCase(), role, profile?.name, profile?.avatar_url ?? undefined);
+          router.push(role === 'admin' ? '/admin' : '/main');
+          return;
+        } catch {
+          // อ่านโปรไฟล์พัง ใช้ role จากอีเมลแทน
+          const role = resolveRole(user.email ?? email);
+          saveLocalSession((user.email ?? email).toLowerCase(), role);
+          router.push(role === 'admin' ? '/admin' : '/main');
+          return;
+        }
+      }
+    } catch (err: unknown) {
+      // fallback: บัญชี mock เดิมที่ยังไม่มีใน Auth (เช่น admin@lru.ac.th) ให้เข้าได้เหมือนเดิม
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.includes('Invalid login credentials')) {
+        processLogin(email);
+        return;
+      }
+      setAuthError(msg || 'เข้าสู่ระบบไม่สำเร็จ');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleGoogleReal = async () => {
+    setAuthError('');
+    try {
+      const { error } = await signInWithGoogleReal();
+      if (error) throw error;
+    } catch (err: unknown) {
+      setAuthError(err instanceof Error ? err.message : 'Google sign-in ไม่สำเร็จ');
+    }
   };
 
   return (
@@ -99,6 +144,13 @@ export default function LoginPage() {
 
             <button 
               type="button" 
+              onClick={handleGoogleReal}
+              className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm transition-colors mb-2"
+            >
+              เชื่อม Google จริง (Supabase OAuth)
+            </button>
+            <button 
+              type="button" 
               onClick={() => setShowGoogleModal(false)}
               className="w-full py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-sm transition-colors"
             >
@@ -139,6 +191,8 @@ export default function LoginPage() {
               <input 
                 type={showPassword ? "text" : "password"} 
                 id="password" 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••••••" 
                 className="w-full px-4 py-3.5 rounded-xl bg-gray-50 border border-gray-200 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15 outline-none text-gray-900 placeholder-gray-400 transition-all duration-200 pr-12"
                 required
@@ -155,9 +209,10 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <button type="submit" className="w-full bg-[#1c58f6] hover:bg-blue-700 active:scale-[0.99] text-white font-medium py-3.5 rounded-xl transition-all duration-200 shadow-md shadow-blue-500/20">
-            Sign In
+          <button type="submit" disabled={busy} className="w-full bg-[#1c58f6] hover:bg-blue-700 active:scale-[0.99] text-white font-medium py-3.5 rounded-xl transition-all duration-200 shadow-md shadow-blue-500/20 disabled:opacity-60">
+            {busy ? 'กำลังเข้าสู่ระบบ...' : 'Sign In'}
           </button>
+          {authError && <p className="text-xs font-bold text-red-500 text-center">{authError}</p>}
         </form>
 
         <div className="flex items-center my-6">

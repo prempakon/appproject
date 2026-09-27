@@ -60,6 +60,32 @@ export default function AdminDashboard() {
     if (role !== 'admin') {
       router.push('/');
     }
+    // ทางจริง: ลองดึง profiles จาก DB มาทับ mock (พัง/ว่างก็ใช้ STUDENTS เดิม)
+    (async () => {
+      try {
+        const { listProfilesForAdmin } = await import('../../lib/profiles');
+        const { profiles, portfolios } = await listProfilesForAdmin();
+        if (profiles.length === 0) return;
+        const mapped: StudentRow[] = profiles.map((p) => {
+          const files = portfolios.filter((f) => f.user_id === p.id);
+          return {
+            id: `DB-${p.id.slice(0, 8).toUpperCase()}`,
+            name: p.name,
+            email: p.email,
+            institution: p.institution,
+            major: p.major,
+            latestUpload: files.length > 0 ? new Date(files[0].created_at).toLocaleDateString('th-TH') : '-',
+            career: '-',
+            files: files.length,
+            skills: [],
+            status: files.length > 0 ? 'analyzed' : 'pending',
+          };
+        });
+        setRows(mapped);
+      } catch {
+        // เงียบไว้ ใช้ mock เดิม (เช่น ยังไม่รัน fix_rls_admin.sql)
+      }
+    })();
   }, [router]);
 
   const [rows, setRows] = useState<StudentRow[]>(STUDENTS);

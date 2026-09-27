@@ -2,10 +2,15 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { signUpReal } from '../../lib/auth';
+import { uploadAvatarReal } from '../../lib/storage';
+import { resolveRole } from '../../lib/database.types';
 
 export default function SetupPage() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [authError, setAuthError] = useState('');
   
   const [formData, setFormData] = useState({
     email: '',
@@ -17,9 +22,11 @@ export default function SetupPage() {
   });
 
   const [previewAvatar, setPreviewAvatar] = useState('https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150');
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
+      setAvatarFile(e.target.files[0]);
       const url = URL.createObjectURL(e.target.files[0]);
       setPreviewAvatar(url);
     }
@@ -30,12 +37,15 @@ export default function SetupPage() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAuthError('');
+    setBusy(true);
     
     const fullName = `${formData.firstName} ${formData.lastName}`.trim();
-    
-    // บันทึกข้อมูลลง localStorage
+    const cleanEmail = formData.email.trim().toLowerCase();
+
+    // สำรอง localStorage เดิมไว้ก่อนเสมอ (fallback ถ้า DB พัง)
     localStorage.setItem('userProfile', JSON.stringify({
       name: fullName || 'นักศึกษาใหม่',
       avatar: previewAvatar,
@@ -43,12 +53,47 @@ export default function SetupPage() {
       major: formData.major,
       email: formData.email
     }));
-
-    localStorage.setItem('userRole', 'student');
+    localStorage.setItem('userRole', resolveRole(cleanEmail));
     localStorage.setItem('userEmail', formData.email);
+
+    try {
+      // ทางจริง: Supabase Auth + profiles
+      const { user } = await signUpReal(cleanEmail, formData.password, {
+        name: fullName || 'นักศึกษาใหม่',
+        institution: formData.institution,
+        major: formData.major,
+        avatar_url: null,
+      });
+      // อัปโหลดรูปจริงถ้าเลือกไฟล์ (ไม่บังคับ — พังก็ใช้ preview เดิม)
+      if (user && avatarFile) {
+        try {
+          const publicUrl = await uploadAvatarReal(user.id, avatarFile);
+          const { supabase } = await import('../../lib/supabaseClient');
+          await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id);
+          localStorage.setItem('userProfile', JSON.stringify({
+            name: fullName || 'นักศึกษาใหม่',
+            avatar: publicUrl,
+            institution: formData.institution,
+            major: formData.major,
+            email: formData.email
+          }));
+        } catch {
+          // เงียบไว้ ใช้ local preview ต่อได้
+        }
+      }
+    } catch (err: unknown) {
+      // ถ้าอีเมลซ้ำ (มีใน Auth แล้ว) ให้แจ้งแต่ยังพาเข้าได้ด้วย local fallback
+      const msg = err instanceof Error ? err.message : '';
+      if (!msg.toLowerCase().includes('already registered') && !msg.toLowerCase().includes('already exists')) {
+        setAuthError(msg || 'สมัครไม่สำเร็จ แต่บันทึกแบบออฟไลน์ไว้แล้ว');
+      }
+    } finally {
+      setBusy(false);
+    }
     
     // ลงทะเบียนเสร็จ พาไปหน้าหลักทันที
-    router.push('/main');
+    const role = resolveRole(cleanEmail);
+    router.push(role === 'admin' ? '/admin' : '/main');
   };
 
   return (
@@ -151,9 +196,10 @@ export default function SetupPage() {
           </div>
 
           <div className="pt-2">
-            <button type="submit" className="w-full bg-[#1c58f6] hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-blue-500/25 active:scale-[0.99] text-sm">
-              ลงทะเบียนและเข้าสู่ระบบ
+            <button type="submit" disabled={busy} className="w-full bg-[#1c58f6] hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-blue-500/25 active:scale-[0.99] text-sm disabled:opacity-60">
+              {busy ? 'กำลังสมัครสมาชิก...' : 'ลงทะเบียนและเข้าสู่ระบบ'}
             </button>
+            {authError && <p className="text-xs font-bold text-red-500 text-center mt-2">{authError}</p>}
           </div>
 
           <div className="text-center pt-2">

@@ -26,6 +26,7 @@ export default function PortfolioStorage() {
   
   const [additionalSkillsText, setAdditionalSkillsText] = useState('');
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  const [selectedExistingIds, setSelectedExistingIds] = useState<(string | null)[]>([]);
   const [showResultModal, setShowResultModal] = useState(false);
   const [isHistoryDropdownOpen, setIsHistoryDropdownOpen] = useState(false);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
@@ -33,14 +34,30 @@ export default function PortfolioStorage() {
   const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
   const [selectedModalFiles, setSelectedModalFiles] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const galleryFileInputRef = useRef<HTMLInputElement>(null);
+  const [gallerySaving, setGallerySaving] = useState(false);
 
   const [userProfile, setUserProfile] = useState<UserProfile>({ name: 'User', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150' });
+  const [myPortfolios, setMyPortfolios] = useState<{ id: string; title: string; file_url: string; file_type: string; created_at: string }[]>([]);
+
+  const refreshMyPortfolios = async () => {
+    try {
+      const { getSessionUser } = await import('../../lib/auth');
+      const { listMyPortfolios } = await import('../../lib/profiles');
+      const user = await getSessionUser();
+      if (!user) return;
+      setMyPortfolios(await listMyPortfolios(user.id));
+    } catch {
+      // เงียบไว้ ใช้ mock เดิม
+    }
+  };
 
   useEffect(() => {
     const saved = localStorage.getItem('userProfile');
     if (saved) {
       setUserProfile(JSON.parse(saved));
     }
+    refreshMyPortfolios();
   }, []);
 
   useEffect(() => {
@@ -65,19 +82,51 @@ export default function PortfolioStorage() {
     return () => { previewUrls.forEach(url => { if (url.startsWith('blob:')) URL.revokeObjectURL(url); }); };
   }, [previewUrls]);
 
-  const handleFilesSelected = (files: File[], urls: string[]) => {
+  const handleFilesSelected = (files: File[], urls: string[], existingIds: (string | null)[] = []) => {
     setIsMediaModalOpen(false);
     setSelectedFiles(files);
     setPreviewUrls(urls);
+    setSelectedExistingIds(existingIds);
     setAdditionalSkillsText('');
     setUploadStatus('preview');
   };
 
-  const startAIProcessing = () => {
+  const startAIProcessing = async () => {
     setUploadStatus('processing');
+    // ทางจริง: ไฟล์จากเครื่องอัปโหลดใหม่ / ไฟล์จากคลังใช้แถวเดิมแล้วบันทึกผลวิเคราะห์เพิ่ม (พังก็ยังโชว์ mock ต่อได้)
+    try {
+      const { getSessionUser } = await import('../../lib/auth');
+      const { uploadPortfolioReal, saveAnalysisReal } = await import('../../lib/storage');
+      const user = await getSessionUser();
+      if (user && selectedFiles.length > 0) {
+        for (let idx = 0; idx < selectedFiles.length; idx++) {
+          const f = selectedFiles[idx];
+          const existingId = selectedExistingIds[idx] ?? null;
+          try {
+            if (existingId) {
+              await saveAnalysisReal(user.id, existingId, {
+                skills: additionalSkillsText ? [additionalSkillsText] : ['Python', 'SQL'],
+                career: null,
+              });
+            } else if (f.size > 0) {
+              const row = await uploadPortfolioReal(user.id, f);
+              await saveAnalysisReal(user.id, (row as { id: string }).id, {
+                skills: additionalSkillsText ? [additionalSkillsText] : ['Python', 'SQL'],
+                career: null,
+              });
+            }
+          } catch {
+            // ไฟล์เดียวพัง ข้ามไปไฟล์ต่อไป
+          }
+        }
+      }
+    } catch {
+      // เงียบไว้ ใช้ mock flow เดิม
+    }
     setTimeout(() => {
       setUploadStatus('success');
       setShowResultModal(true);
+      refreshMyPortfolios();
     }, 4000);
   };
 
@@ -99,6 +148,8 @@ export default function PortfolioStorage() {
     }
   };
 
+  const [dropError, setDropError] = useState('');
+
   const toggleGallerySelection = (fileData: any) => {
     setSelectedModalFiles((prev) => {
       const isAlreadySelected = prev.some((f) => f.id === fileData.id);
@@ -106,31 +157,156 @@ export default function PortfolioStorage() {
     });
   };
 
+  const dbIdOf = (id: string | number): string | null => {
+    const s = String(id);
+    return s.startsWith('db-') ? s.slice(3) : null;
+  };
+
   const confirmGallerySelection = () => {
     const mockFiles = selectedModalFiles.map((f) => new File([''], f.title, { type: f.type === 'PDF' ? 'application/pdf' : 'image/jpeg' }));
     const urls = selectedModalFiles.map(f => f.imageUrl);
-    handleFilesSelected(mockFiles, urls);
+    const ids = selectedModalFiles.map((f) => dbIdOf(f.id));
+    handleFilesSelected(mockFiles, urls, ids);
   };
 
-  const handleMainDrop = (e: React.DragEvent) => {
+  // ลากการ์ดจากคลัง: แนบข้อมูลรูปไปกับ drag event (รองรับหลายรูปที่เลือกไว้)
+  const [gallerySelected, setGallerySelected] = useState<{ id: string; title: string; imageUrl: string; type: string }[]>([]);
+
+  const toggleGalleryCard = (file: { id: string; title: string; imageUrl: string; type: string }) => {
+    setGallerySelected((prev) =>
+      prev.some((f) => f.id === file.id) ? prev.filter((f) => f.id !== file.id) : [...prev, file]
+    );
+  };
+
+  // ส่งรูปที่เลือกในคลังเข้าขั้นตอนวิเคราะห์ (ดึง URL กลับมาเป็นไฟล์ + จำ id แถวเดิมไว้กันอัปโหลดซ้ำ)
+  const sendGalleryToAnalysis = async (list: { id: string; title: string; imageUrl: string; type: string }[]) => {
+    if (list.length === 0) return;
+    setDropError('');
+    const files: File[] = [];
+    const urls: string[] = [];
+    const ids: (string | null)[] = [];
+    for (const item of list) {
+      const f = await fetchUrlAsFile(item.imageUrl, item.title);
+      if (f) {
+        files.push(f);
+        urls.push(item.imageUrl);
+        ids.push(dbIdOf(item.id));
+      }
+    }
+    if (files.length > 0) {
+      setGallerySelected([]);
+      handleFilesSelected(files, urls, ids);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      setDropError('ดึงรูปจากคลังไม่สำเร็จ (ติด CORS) ให้กด “เลือกจากคลัง” แทน');
+      setTimeout(() => setDropError(''), 5000);
+    }
+  };
+
+  // ดึงรูปจาก URL (คลังของตัวเอง/unsplash ตัวอย่าง) กลับมาเป็น File เพื่อเข้าขั้นตอนวิเคราะห์
+  const fetchUrlAsFile = async (imageUrl: string, title: string): Promise<File | null> => {
+    try {
+      const res = await fetch(imageUrl);
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      if (blob.size > 10 * 1024 * 1024) return null;
+      return new File([blob], title || 'gallery-image.jpg', { type: blob.type || 'image/jpeg' });
+    } catch {
+      return null;
+    }
+  };
+
+  const handleMainDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const filesArray = Array.from(e.dataTransfer.files);
-      const validFiles = filesArray.filter((f) => f.size <= 10 * 1024 * 1024);
-      if (validFiles.length > 0) {
-        const urls = validFiles.map(f => URL.createObjectURL(f));
-        handleFilesSelected(validFiles, urls);
+    setDropError('');
+    // รวมไฟล์จากทั้ง files และ items (บางเบราว์เซอร์ส่งมาทาง items)
+    const fromFiles = e.dataTransfer.files && e.dataTransfer.files.length > 0
+      ? Array.from(e.dataTransfer.files)
+      : [];
+    const fromItems: File[] = [];
+    if (e.dataTransfer.items) {
+      for (const item of Array.from(e.dataTransfer.items)) {
+        if (item.kind === 'file') {
+          const f = item.getAsFile();
+          if (f) fromItems.push(f);
+        }
       }
+    }
+    const seen = new Set<string>();
+    const filesArray = [...fromFiles, ...fromItems].filter((f) => {
+      const key = `${f.name}-${f.size}-${f.lastModified}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    if (filesArray.length === 0) {
+      // วาง URL รูปจากเว็บ: ดึงกลับมาเป็นไฟล์ (รูปในคลังใช้วิธีคลิกเลือก + ปุ่มนำไปวิเคราะห์แทน)
+      const metaRaw = e.dataTransfer.getData('application/x-portfolio');
+      const uriList = e.dataTransfer.getData('text/uri-list');
+      let meta: { title?: string; imageUrl?: string } = {};
+      try {
+        if (metaRaw) meta = JSON.parse(metaRaw);
+      } catch {
+        // ไม่ใช่การ์ดคลัง ข้ามไปใช้ URL ตรงๆ
+      }
+      const imageUrl = meta.imageUrl || (uriList ? uriList.split('\n')[0].trim() : '');
+      if (imageUrl) {
+        const file = await fetchUrlAsFile(imageUrl, meta.title || 'gallery-image.jpg');
+        if (file) {
+          handleFilesSelected([file], [imageUrl]);
+          return;
+        }
+        setDropError('ดึงรูปจากคลังไม่สำเร็จ (ติด CORS) ให้กด “เลือกจากคลัง” แทน');
+        setTimeout(() => setDropError(''), 5000);
+        return;
+      }
+      setDropError('ลากรูปจากเว็บโดยตรงไม่ได้ ให้คลิกขวา > บันทึกรูปลงเครื่องก่อน แล้วค่อยลากไฟล์มาใส่');
+      setTimeout(() => setDropError(''), 5000);
+      return;
+    }
+    const validFiles = filesArray.filter((f) => f.size <= 10 * 1024 * 1024);
+    if (validFiles.length > 0) {
+      const urls = validFiles.map(f => URL.createObjectURL(f));
+      handleFilesSelected(validFiles, urls);
+    } else {
+      setDropError('ไฟล์ใหญ่เกิน 10MB ไม่รองรับ');
+      setTimeout(() => setDropError(''), 5000);
     }
   };
 
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
   const handleDragLeave = () => setIsDragging(false);
 
+  // เพิ่มรูปจากเครื่องสู่คลังโดยตรง (ไม่ผ่านขั้นตอนวิเคราะห์)
+  const handleGalleryDirectSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const filesArray = Array.from(e.target.files).filter((f) => f.size <= 10 * 1024 * 1024);
+    if (filesArray.length === 0) return;
+    setGallerySaving(true);
+    try {
+      const { getSessionUser } = await import('../../lib/auth');
+      const { uploadPortfolioReal } = await import('../../lib/storage');
+      const user = await getSessionUser();
+      if (!user) return;
+      for (const f of filesArray) {
+        try {
+          await uploadPortfolioReal(user.id, f);
+        } catch {
+          // ไฟล์เดียวพัง ข้ามไป
+        }
+      }
+      await refreshMyPortfolios();
+    } finally {
+      setGallerySaving(false);
+      if (galleryFileInputRef.current) galleryFileInputRef.current.value = '';
+    }
+  };
+
   const resetUpload = () => {
     setSelectedFiles([]);
     setPreviewUrls([]);
+    setSelectedExistingIds([]);
     setAdditionalSkillsText('');
     setUploadStatus('idle');
     setShowResultModal(false);
@@ -140,6 +316,7 @@ export default function PortfolioStorage() {
   return (
     <main className="min-h-screen bg-[#f8f9fa] text-slate-800 font-sans relative overflow-x-hidden flex flex-col">
       <input type="file" multiple ref={fileInputRef} onChange={handleLocalFileSelect} accept=".pdf,.jpg,.jpeg,.png" className="hidden" />
+      <input type="file" multiple ref={galleryFileInputRef} onChange={handleGalleryDirectSelect} accept=".pdf,.jpg,.jpeg,.png" className="hidden" />
 
       <ResultModal isOpen={showResultModal} onClose={() => setShowResultModal(false)} files={selectedFiles} />
 
@@ -161,7 +338,10 @@ export default function PortfolioStorage() {
 
             <div className="p-6 overflow-y-auto flex-grow bg-slate-50/50 relative">
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-20">
-                {PORTFOLIO_FILES.map((file) => {
+                {[
+                  ...myPortfolios.map((p) => ({ id: `db-${p.id}`, title: p.title, type: p.file_type, imageUrl: p.file_url })),
+                  ...(myPortfolios.length > 0 ? [] : PORTFOLIO_FILES),
+                ].map((file) => {
                   const isSelected = selectedModalFiles.some((f) => f.id === file.id);
                   return (
                     <div key={file.id} onClick={() => toggleGallerySelection(file)} className={`group cursor-pointer bg-white rounded-xl border-2 transition-all overflow-hidden relative ${isSelected ? 'border-blue-500 shadow-md ring-2 ring-blue-500/20' : 'border-slate-200 hover:border-blue-300'}`}>
@@ -333,6 +513,7 @@ export default function PortfolioStorage() {
                   </button>
                 </div>
                 <span className="mt-8 text-sm font-medium text-slate-400">รองรับการเลือกไฟล์ PDF, JPG, PNG (Max 10MB)</span>
+                {dropError && <p className="mt-3 text-sm font-bold text-red-500 text-center max-w-lg">{dropError}</p>}
               </>
             )}
 
@@ -353,14 +534,15 @@ export default function PortfolioStorage() {
                 <div className="w-full max-w-2xl mb-10">
                   <label className="block text-sm font-extrabold text-slate-700 mb-3 flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-blue-500"><path d="M21.731 2.269a2.625 2.625 0 00-3.712 0l-1.157 1.158 3.712 3.712 1.157-1.157a2.625 2.625 0 000-3.712zM19.513 8.199l-3.712-3.712-8.4 8.4a5.25 5.25 0 00-1.32 2.214l-.8 2.685a.75.75 0 00.933.933l2.685-.8a5.25 5.25 0 002.214-1.32l8.4-8.4z" /><path d="M5.25 5.25a3 3 0 00-3 3v10.5a3 3 0 003 3h10.5a3 3 0 003-3V13.5a.75.75 0 00-1.5 0v5.25a1.5 1.5 0 01-1.5 1.5H5.25a1.5 1.5 0 01-1.5-1.5V8.25a1.5 1.5 0 011.5-1.5h5.25a.75.75 0 000-1.5H5.25z" /></svg>
-                    เพิ่มทักษะหรือรายละเอียดเพิ่มเติม (ถ้ามี)
+                    เพิ่มทักษะ รายละเอียด หรืออาชีพที่คุณสนใจ (ถ้ามี)
                   </label>
                   <textarea
                     value={additionalSkillsText}
                     onChange={(e) => setAdditionalSkillsText(e.target.value)}
-                    placeholder="เช่น มีทักษะเขียนโปรแกรม React, Node.js จากการทำโปรเจกต์ แต่ยังไม่มีใบเซอร์รับรอง..."
+                    placeholder="เช่น อยากเป็น Data Scientist มีทักษะเขียนโปรแกรม React, Node.js จากการทำโปรเจกต์ แต่ยังไม่มีใบเซอร์รับรอง... AI จะใช้เป้าหมายนี้ประเมินความพร้อมให้"
                     className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 resize-none h-32 text-slate-700 placeholder:text-slate-400 transition-all shadow-inner"
                   />
+                  <p className="text-xs font-medium text-slate-400 mt-2">AI จะอ่านอาชีพที่สนใจจากช่องนี้ไปประเมินร่วมกับผลงานที่อัปโหลด</p>
                 </div>
 
                 <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md justify-center">
@@ -402,23 +584,74 @@ export default function PortfolioStorage() {
         {/* --- คลังผลงาน --- */}
         <section className="flex flex-col flex-grow pb-10 w-full">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 border-b border-slate-200 pb-4 flex-shrink-0 gap-4">
-            <h2 className="text-3xl font-extrabold text-slate-800 flex-shrink-0">คลังรูปภาพของฉัน (ล่าสุด)</h2>
+            <h2 className="text-3xl font-extrabold text-slate-800 flex-shrink-0">คลังรูปภาพของฉัน</h2>
+            <div className="flex items-center gap-3">
+              <button onClick={() => galleryFileInputRef.current?.click()} disabled={gallerySaving} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-bold text-sm transition-all shadow-sm whitespace-nowrap disabled:opacity-60">
+                {gallerySaving ? 'กำลังเพิ่มลงคลัง...' : '+ เพิ่มรูปจากเครื่องสู่คลัง'}
+              </button>
+              <Link href="/gallery" className="px-5 py-2.5 bg-white border border-slate-200 hover:border-blue-400 hover:text-blue-600 text-slate-700 rounded-full font-bold text-sm transition-all shadow-sm whitespace-nowrap">
+                ดูรูปทั้งหมด ({myPortfolios.length > 0 ? myPortfolios.length : PORTFOLIO_FILES.length}) →
+              </Link>
+            </div>
           </div>
 
+          {gallerySelected.length > 0 && (
+            <div className="mb-6 bg-slate-900/90 backdrop-blur-md px-6 py-4 rounded-2xl shadow-2xl flex flex-wrap items-center gap-4">
+              <span className="text-white font-medium text-sm whitespace-nowrap">เลือกแล้ว <span className="font-extrabold text-blue-400">{gallerySelected.length}</span> รายการ (คลิกการ์ดเพื่อเลือกเพิ่ม)</span>
+              <div className="flex gap-3 ml-auto">
+                <button onClick={() => setGallerySelected([])} className="px-5 py-2 bg-white/10 hover:bg-white/20 text-white rounded-full font-bold text-sm transition-all whitespace-nowrap">ล้าง</button>
+                <button onClick={() => sendGalleryToAnalysis(gallerySelected)} className="px-6 py-2 bg-blue-500 hover:bg-blue-400 text-white rounded-full font-bold text-sm transition-all active:scale-95 whitespace-nowrap">นำไปวิเคราะห์ →</button>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-            {PORTFOLIO_FILES.map((file) => (
-              <div key={file.id} className="group bg-white rounded-3xl shadow-sm hover:shadow-xl border border-slate-100 transition-all duration-300 overflow-hidden flex flex-col flex-shrink-0">
+            {/* ไฟล์จริงจาก DB ขึ้นก่อน (คลิกเลือกหลายรูปได้ / ลากขึ้นไปใส่ช่องวิเคราะห์ได้) */}
+            {myPortfolios.slice(0, 6).map((file) => {
+              const card = { id: `db-${file.id}`, title: file.title, imageUrl: file.file_url, type: file.file_type };
+              const selected = gallerySelected.some((f) => f.id === card.id);
+              return (
+              <div key={file.id} onClick={() => toggleGalleryCard(card)} title="คลิกเพื่อเลือกหลายรูป" className={`group bg-white rounded-3xl shadow-sm hover:shadow-xl border-2 transition-all duration-300 overflow-hidden flex flex-col flex-shrink-0 cursor-pointer relative ${selected ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-blue-100'}`}>
+                {selected && (
+                  <div className="absolute top-3 right-3 z-20 bg-blue-600 text-white p-1.5 rounded-full shadow-md">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" /></svg>
+                  </div>
+                )}
+                <div className="aspect-[4/3] bg-slate-100 relative overflow-hidden flex-shrink-0">
+                  <div className="absolute top-4 left-4 z-10 bg-white/95 backdrop-blur-sm px-4 py-2 rounded-lg text-xs font-extrabold text-slate-800 shadow-sm flex-shrink-0">{file.file_type}</div>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={file.file_url} alt={file.title} draggable={false} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out flex-shrink-0 pointer-events-none" />
+                </div>
+                <div className="p-6 md:p-8 flex flex-col flex-grow flex-shrink-0">
+                  <h3 className="font-extrabold text-slate-800 text-xl truncate flex-shrink-0" title={file.title}>{file.title}</h3>
+                  <p className="text-sm font-medium text-slate-500 mt-2 mb-6 flex-shrink-0">Uploaded on {new Date(file.created_at).toLocaleDateString()}</p>
+                </div>
+              </div>
+              );
+            })}
+            {/* mock เดิมเป็นตัวอย่างเมื่อยังไม่มีไฟล์จริง (คลิกเลือก/ลากได้เช่นกัน) */}
+            {myPortfolios.length === 0 && PORTFOLIO_FILES.map((file) => {
+              const card = { id: `mock-${file.id}`, title: file.title, imageUrl: file.imageUrl, type: file.type };
+              const selected = gallerySelected.some((f) => f.id === card.id);
+              return (
+              <div key={file.id} onClick={() => toggleGalleryCard(card)} title="คลิกเพื่อเลือกหลายรูป" className={`group bg-white rounded-3xl shadow-sm hover:shadow-xl border-2 transition-all duration-300 overflow-hidden flex flex-col flex-shrink-0 cursor-pointer relative ${selected ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-slate-100'}`}>
+                {selected && (
+                  <div className="absolute top-3 right-3 z-20 bg-blue-600 text-white p-1.5 rounded-full shadow-md">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" /></svg>
+                  </div>
+                )}
                 <div className="aspect-[4/3] bg-slate-100 relative overflow-hidden flex-shrink-0">
                   <div className="absolute top-4 left-4 z-10 bg-white/95 backdrop-blur-sm px-4 py-2 rounded-lg text-xs font-extrabold text-slate-800 shadow-sm flex-shrink-0">{file.type}</div>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={file.imageUrl} alt={file.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out flex-shrink-0" />
+                  <img src={file.imageUrl} alt={file.title} draggable={false} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out flex-shrink-0 pointer-events-none" />
                 </div>
                 <div className="p-6 md:p-8 flex flex-col flex-grow flex-shrink-0">
                   <h3 className="font-extrabold text-slate-800 text-xl truncate flex-shrink-0" title={file.title}>{file.title}</h3>
                   <p className="text-sm font-medium text-slate-500 mt-2 mb-6 flex-shrink-0">Uploaded on {file.date}</p>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </section>
 

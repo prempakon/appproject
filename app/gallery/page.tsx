@@ -1,15 +1,41 @@
-import React from 'react';
+'use client';
+
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 
 export default function GalleryPage() {
-  const allFiles = [
-    { id: 1, title: 'Certificate_AWS.jpg', date: 'Aug 15, 2024', type: 'JPG', imageUrl: 'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?q=80&w=800&auto=format&fit=crop' },
-    { id: 2, title: 'Transcript_2024.pdf', date: 'Jul 22, 2024', type: 'PDF', imageUrl: 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?q=80&w=800&auto=format&fit=crop' },
-    { id: 3, title: 'Diploma_CS.jpg', date: 'Jun 10, 2024', type: 'JPG', imageUrl: 'https://images.unsplash.com/photo-1606326608606-aa0b62935f2b?q=80&w=800&auto=format&fit=crop' },
-    { id: 4, title: 'Resume_Updated.pdf', date: 'May 01, 2024', type: 'PDF', imageUrl: 'https://images.unsplash.com/photo-1512314889357-e157c22f938d?q=80&w=800&auto=format&fit=crop' },
-    { id: 5, title: 'ID_Card_Copy.png', date: 'Jan 15, 2024', type: 'PNG', imageUrl: 'https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=800&auto=format&fit=crop' },
-    { id: 6, title: 'Award_Hackathon.jpg', date: 'Nov 20, 2023', type: 'JPG', imageUrl: 'https://images.unsplash.com/photo-1531545514251-b159ce8bf590?q=80&w=800&auto=format&fit=crop' },
+  const mockFiles = [
+    { id: 'm1', title: 'Certificate_AWS.jpg', date: 'Aug 15, 2024', type: 'JPG', imageUrl: 'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?q=80&w=800&auto=format&fit=crop' },
+    { id: 'm2', title: 'Transcript_2024.pdf', date: 'Jul 22, 2024', type: 'PDF', imageUrl: 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?q=80&w=800&auto=format&fit=crop' },
+    { id: 'm3', title: 'Diploma_CS.jpg', date: 'Jun 10, 2024', type: 'JPG', imageUrl: 'https://images.unsplash.com/photo-1606326608606-aa0b62935f2b?q=80&w=800&auto=format&fit=crop' },
+    { id: 'm4', title: 'Resume_Updated.pdf', date: 'May 01, 2024', type: 'PDF', imageUrl: 'https://images.unsplash.com/photo-1512314889357-e157c22f938d?q=80&w=800&auto=format&fit=crop' },
+    { id: 'm5', title: 'ID_Card_Copy.png', date: 'Jan 15, 2024', type: 'PNG', imageUrl: 'https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=800&auto=format&fit=crop' },
+    { id: 'm6', title: 'Award_Hackathon.jpg', date: 'Nov 20, 2023', type: 'JPG', imageUrl: 'https://images.unsplash.com/photo-1531545514251-b159ce8bf590?q=80&w=800&auto=format&fit=crop' },
   ];
+  const [realFiles, setRealFiles] = useState<{ id: string; title: string; date: string; type: string; imageUrl: string }[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { getSessionUser } = await import('../../lib/auth');
+        const { listMyPortfolios } = await import('../../lib/profiles');
+        const user = await getSessionUser();
+        if (!user) return;
+        const rows = await listMyPortfolios(user.id);
+        setRealFiles(rows.map((r) => ({
+          id: r.id,
+          title: r.title,
+          date: new Date(r.created_at).toLocaleDateString(),
+          type: r.file_type,
+          imageUrl: r.file_url,
+        })));
+      } catch {
+        // เงียบไว้ ใช้ mock
+      }
+    })();
+  }, []);
+
+  const allFiles = realFiles.length > 0 ? realFiles : mockFiles;
 
   return (
     <main className="min-h-screen bg-[#f8f9fa] p-4 sm:p-8 lg:p-12 text-slate-800 font-sans">

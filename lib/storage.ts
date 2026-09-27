@@ -1,0 +1,57 @@
+import { supabase } from './supabaseClient';
+
+function extOf(name: string, fallback = 'jpg') {
+  const m = name.toLowerCase().match(/\.([a-z0-9]+)$/);
+  return m ? m[1] : fallback;
+}
+
+export async function uploadAvatarReal(userId: string, file: File) {
+  const path = `${userId}/avatar.${extOf(file.name, 'jpg')}`;
+  const { error } = await supabase.storage.from('avatars').upload(path, file, { upsert: true });
+  if (error) throw error;
+  const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+  return data.publicUrl;
+}
+
+export async function uploadPortfolioReal(userId: string, file: File) {
+  const path = `${userId}/${Date.now()}-${file.name}`;
+  const { error } = await supabase.storage.from('portfolios').upload(path, file);
+  if (error) throw error;
+  const { data } = supabase.storage.from('portfolios').getPublicUrl(path);
+  const { data: row, error: dbErr } = await supabase
+    .from('portfolios')
+    .insert({
+      user_id: userId,
+      title: file.name,
+      file_url: data.publicUrl,
+      file_type: extOf(file.name, 'PDF').toUpperCase(),
+      file_size: file.size,
+    })
+    .select()
+    .single();
+  if (dbErr) throw dbErr;
+  return row;
+}
+
+export async function saveAnalysisReal(userId: string, portfolioId: string, input: {
+  skills: string[];
+  career?: string | null;
+}) {
+  const { data, error } = await supabase
+    .from('analysis_results')
+    .insert({
+      user_id: userId,
+      portfolio_id: portfolioId,
+      skills: input.skills,
+      career: input.career ?? null,
+      accuracy: 85,
+      technical: 90,
+      soft: 65,
+      management: 50,
+      recommendations: [],
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}

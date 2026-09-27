@@ -15,6 +15,8 @@ export default function EditProfilePage() {
   });
 
   const [previewAvatar, setPreviewAvatar] = useState('https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150');
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
 
   // โหลดข้อมูลเดิมที่มีใน localStorage มาแยกใส่ช่องชื่อและนามสกุลให้ถูกต้อง
   useEffect(() => {
@@ -51,6 +53,7 @@ export default function EditProfilePage() {
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
+      setAvatarFile(e.target.files[0]);
       const url = URL.createObjectURL(e.target.files[0]);
       setPreviewAvatar(url);
     }
@@ -61,8 +64,9 @@ export default function EditProfilePage() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    setBusy(true);
     
     const fullName = `${formData.firstName} ${formData.lastName}`.trim();
     
@@ -74,6 +78,7 @@ export default function EditProfilePage() {
       } catch {}
     }
 
+    // local ก่อนเสมอ (ของเดิมไม่หาย)
     localStorage.setItem('userProfile', JSON.stringify({
       name: fullName || 'นักศึกษา LRU',
       avatar: previewAvatar,
@@ -82,6 +87,42 @@ export default function EditProfilePage() {
       bio: formData.bio,
       email: email
     }));
+
+    // ทางจริง: อัปโหลดรูป + upsert profiles (พังก็ยังไป /main ได้ด้วย local)
+    try {
+      const { getSessionUser } = await import('../../../lib/auth');
+      const { upsertMyProfile } = await import('../../../lib/profiles');
+      const { uploadAvatarReal } = await import('../../../lib/storage');
+      const user = await getSessionUser();
+      if (user) {
+        let avatarUrl = previewAvatar.startsWith('blob:') ? null : previewAvatar;
+        if (avatarFile) {
+          try {
+            avatarUrl = await uploadAvatarReal(user.id, avatarFile);
+          } catch {}
+        }
+        const saved = await upsertMyProfile(user.id, {
+          email: user.email ?? email,
+          name: fullName || 'นักศึกษา LRU',
+          institution: formData.institution,
+          major: formData.major,
+          bio: formData.bio,
+          avatar_url: avatarUrl,
+        });
+        localStorage.setItem('userProfile', JSON.stringify({
+          name: saved.name,
+          avatar: saved.avatar_url || previewAvatar,
+          institution: saved.institution,
+          major: saved.major,
+          bio: (saved as { bio: string }).bio,
+          email: saved.email
+        }));
+      }
+    } catch {
+      // เงียบไว้
+    } finally {
+      setBusy(false);
+    }
     
     router.push('/main');
   };
@@ -177,9 +218,10 @@ export default function EditProfilePage() {
             </button>
             <button 
               type="submit" 
-              className="flex-1 bg-[#1c58f6] hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-500/25 active:scale-[0.99] text-sm"
+              disabled={busy}
+              className="flex-1 bg-[#1c58f6] hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-500/25 active:scale-[0.99] text-sm disabled:opacity-60"
             >
-              บันทึกการแก้ไข
+              {busy ? 'กำลังบันทึก...' : 'บันทึกการแก้ไข'}
             </button>
           </div>
           

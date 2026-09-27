@@ -14,6 +14,7 @@ export default function ProfilePage() {
   });
 
   useEffect(() => {
+    // local ทันที (fallback เดิม) แล้วค่อยทับด้วย DB จริงถ้ามี session
     const saved = localStorage.getItem('userProfile');
     if (saved) {
       try {
@@ -23,6 +24,26 @@ export default function ProfilePage() {
         console.error(e);
       }
     }
+    (async () => {
+      try {
+        const { getSessionUser } = await import('../../lib/auth');
+        const { getMyProfile } = await import('../../lib/profiles');
+        const user = await getSessionUser();
+        if (!user) return;
+        const db = await getMyProfile(user.id);
+        if (db) {
+          setProfile({
+            name: db.name,
+            avatar: db.avatar_url || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150',
+            institution: db.institution,
+            major: db.major,
+            bio: (db as { bio: string }).bio || 'ยังไม่ได้กรอก',
+          });
+        }
+      } catch {
+        // เงียบไว้ ใช้ local ต่อ
+      }
+    })();
   }, []);
 
   return (

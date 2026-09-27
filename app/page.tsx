@@ -5,17 +5,45 @@ import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
+  const [email, setEmail] = useState('');
+  const [showGoogleModal, setShowGoogleModal] = useState(false);
   const router = useRouter();
+
+  // กำหนดอีเมลที่มีสิทธิ์เป็นแอดมิน
+  const ADMIN_EMAILS = ['admin@lru.ac.th', 'superadmin@lru.ac.th'];
+
+  const processLogin = (userEmail: string) => {
+    const cleanEmail = userEmail.trim().toLowerCase();
+    
+    if (ADMIN_EMAILS.includes(cleanEmail)) {
+      // ถ้าเป็นแอดมิน ไปหน้าแดชบอร์ด
+      localStorage.setItem('userRole', 'admin');
+      localStorage.setItem('userEmail', cleanEmail);
+      router.push('/admin');
+    } else {
+      // ถ้ามีบัญชีอยู่แล้ว (ผู้ใช้ทั่วไป) ให้พุ่งตรงไปหน้าหลัก /main ทันที
+      localStorage.setItem('userRole', 'student');
+      localStorage.setItem('userEmail', cleanEmail);
+      
+      // บันทึก Mock Profile เริ่มต้นไว้เผื่อหน้า Main ดึงไปโชว์
+      localStorage.setItem('userProfile', JSON.stringify({
+        name: cleanEmail.split('@')[0] || 'นักศึกษา LRU',
+        avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150',
+        email: cleanEmail
+      }));
+
+      router.push('/main');
+    }
+  };
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    // เปลี่ยนเป้าหมายให้วิ่งไปหน้ากรอกข้อมูลประวัติก่อน
-    router.push('/setup');
+    processLogin(email);
   };
 
   return (
     <main 
-      className="min-h-screen flex items-center justify-center p-4 sm:p-6 text-gray-800"
+      className="min-h-screen flex items-center justify-center p-4 sm:p-6 text-gray-800 relative"
       style={{
         backgroundColor: '#f0f4fd',
         backgroundImage: `
@@ -27,9 +55,62 @@ export default function LoginPage() {
         backgroundAttachment: 'fixed',
       }}
     >
+      {/* GOOGLE ACCOUNT CHOOSER MODAL */}
+      {showGoogleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl p-6 sm:p-8 overflow-hidden border border-slate-100">
+            <div className="text-center mb-6">
+              <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-3 font-black text-xl shadow-inner">
+                G
+              </div>
+              <h3 className="text-xl font-extrabold text-slate-900">ลงชื่อเข้าใช้ด้วย Google</h3>
+              <p className="text-xs text-slate-500 mt-1">เลือกบัญชีเพื่อดำเนินการต่อยัง Portfolio System</p>
+            </div>
+
+            <div className="space-y-3 mb-6">
+              <div 
+                onClick={() => processLogin('student.lru@lru.ac.th')}
+                className="flex items-center gap-4 p-3.5 rounded-2xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50/30 cursor-pointer transition-all group"
+              >
+                <div className="w-10 h-10 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center flex-shrink-0 text-sm">
+                  S
+                </div>
+                <div className="min-w-0 flex-grow">
+                  <p className="text-sm font-bold text-slate-800 group-hover:text-blue-700">Student LRU</p>
+                  <p className="text-xs text-slate-400 truncate">student.lru@lru.ac.th</p>
+                </div>
+                <span className="text-xs font-bold text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">เลือก</span>
+              </div>
+
+              <div 
+                onClick={() => processLogin('admin@lru.ac.th')}
+                className="flex items-center gap-4 p-3.5 rounded-2xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50/30 cursor-pointer transition-all group"
+              >
+                <div className="w-10 h-10 rounded-full bg-slate-900 text-white font-bold flex items-center justify-center flex-shrink-0 text-sm">
+                  A
+                </div>
+                <div className="min-w-0 flex-grow">
+                  <p className="text-sm font-bold text-slate-800 group-hover:text-blue-700">Administrator</p>
+                  <p className="text-xs text-slate-400 truncate">admin@lru.ac.th</p>
+                </div>
+                <span className="text-xs font-bold text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">เลือก</span>
+              </div>
+            </div>
+
+            <button 
+              type="button" 
+              onClick={() => setShowGoogleModal(false)}
+              className="w-full py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-sm transition-colors"
+            >
+              ยกเลิก
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white w-full max-w-[460px] rounded-3xl shadow-2xl p-10 sm:p-12 relative flex flex-col justify-center border border-gray-100 animate-in fade-in zoom-in-95 duration-500">
         
-        <div className="mb-10 mt-2 text-center">
+        <div className="mb-8 mt-2 text-center">
           <h1 className="text-3xl font-bold text-gray-900 tracking-tight">
             Welcome <span className="block mt-1.5 text-[1.35rem] font-semibold text-gray-500">ยินดีต้อนรับ</span>
           </h1>
@@ -39,17 +120,26 @@ export default function LoginPage() {
           <div className="space-y-2">
             <label htmlFor="email" className="block text-medium font-medium text-gray-700">ที่อยู่อีเมล</label>
             <input 
-              type="email" id="email" placeholder="...@gmail.com หรือ @lru.ac.th" 
+              type="email" 
+              id="email" 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="admin@lru.ac.th หรือ นักศึกษา" 
               className="w-full px-4 py-3.5 rounded-xl bg-gray-50 border border-gray-200 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15 outline-none text-gray-900 placeholder-gray-400 transition-all duration-200"
               required
             />
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="password" className="block text-medium font-medium text-gray-700">รหัสผ่าน</label>
+            <div className="flex justify-between items-center">
+              <label htmlFor="password" className="block text-medium font-medium text-gray-700">รหัสผ่าน</label>
+              <a href="#" className="text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors">ลืมรหัสผ่าน?</a>
+            </div>
             <div className="relative">
               <input 
-                type={showPassword ? "text" : "password"} id="password" placeholder="••••••••••••" 
+                type={showPassword ? "text" : "password"} 
+                id="password" 
+                placeholder="••••••••••••" 
                 className="w-full px-4 py-3.5 rounded-xl bg-gray-50 border border-gray-200 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15 outline-none text-gray-900 placeholder-gray-400 transition-all duration-200 pr-12"
                 required
               />
@@ -70,13 +160,17 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="flex items-center my-7">
+        <div className="flex items-center my-6">
           <div className="flex-grow border-t border-gray-100"></div>
           <span className="flex-shrink-0 px-4 text-xs font-medium text-gray-400">or continue with</span>
           <div className="flex-grow border-t border-gray-100"></div>
         </div>
 
-        <button type="button" onClick={() => router.push('/setup')} className="w-full bg-white hover:bg-gray-50 active:bg-gray-100 border border-gray-200 text-gray-700 font-medium py-3.5 rounded-xl shadow-sm transition-all duration-200 flex items-center justify-center gap-3">
+        <button 
+          type="button" 
+          onClick={() => setShowGoogleModal(true)} 
+          className="w-full bg-white hover:bg-gray-50 active:bg-gray-100 border border-gray-200 text-gray-700 font-medium py-3.5 rounded-xl shadow-sm transition-all duration-200 flex items-center justify-center gap-3"
+        >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-5 h-5">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
             <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
@@ -85,6 +179,21 @@ export default function LoginPage() {
           </svg>
           Sign In with Google
         </button>
+
+        {/* ปุ่มสำหรับสมัครสมาชิกใหม่ (วิ่งไปหน้า Setup) */}
+        <div className="mt-6 text-center">
+          <p className="text-xs text-gray-500">
+            ยังไม่มีบัญชีผู้ใช้ใช่ไหม?{' '}
+            <button 
+              type="button" 
+              onClick={() => router.push('/setup')} 
+              className="font-bold text-blue-600 hover:underline focus:outline-none"
+            >
+              สมัครสมาชิก (ลงทะเบียน)
+            </button>
+          </p>
+        </div>
+
       </div>
     </main>
   );

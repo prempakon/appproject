@@ -2,8 +2,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-
-// === แก้ไข Path ตรงนี้ให้ตรงกับโครงสร้างโฟลเดอร์เป๊ะๆ ===
 import ResultModal from '../components/ResultModal'; 
 
 type UserProfile = {
@@ -36,10 +34,8 @@ export default function PortfolioStorage() {
   const [selectedModalFiles, setSelectedModalFiles] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // === State สำหรับเก็บข้อมูล User ===
   const [userProfile, setUserProfile] = useState<UserProfile>({ name: 'User', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150' });
 
-  // โหลดข้อมูล User ทันทีที่เปิดหน้าต่างนี้
   useEffect(() => {
     const saved = localStorage.getItem('userProfile');
     if (saved) {
@@ -47,7 +43,6 @@ export default function PortfolioStorage() {
     }
   }, []);
 
-  // ดักคลิกพื้นที่อื่นเพื่อปิด Dropdown
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Element;
@@ -198,7 +193,7 @@ export default function PortfolioStorage() {
         </div>
       )}
 
-      {/* ================= NAVBAR / HEADER ด้านบนสุด ================= */}
+      {/* ================= NAVBAR / HEADER ================= */}
       <header className="w-full bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 md:px-8 py-4 flex justify-between items-center">
           <div className="text-2xl font-black text-blue-600 tracking-tight flex items-center gap-2">
@@ -248,7 +243,7 @@ export default function PortfolioStorage() {
               )}
             </div>
 
-            {/* === ดึงรูป User จาก State มาแสดงตรงนี้ === */}
+            {/* Profile Dropdown */}
             <div id="profile-dropdown-container" className="relative">
               <button
                 type="button"
@@ -258,11 +253,7 @@ export default function PortfolioStorage() {
                 <span className="hidden sm:block text-sm font-bold text-slate-800">{userProfile.name}</span>
                 <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden border-2 shadow-sm cursor-pointer transition-colors flex-shrink-0 bg-slate-100 ${isProfileDropdownOpen ? 'border-blue-500' : 'border-slate-200 hover:border-blue-400'}`}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img 
-                    src={userProfile.avatar} 
-                    alt="User Profile" 
-                    className="w-full h-full object-cover" 
-                  />
+                  <img src={userProfile.avatar} alt="User Profile" className="w-full h-full object-cover" />
                 </div>
               </button>
 
@@ -301,7 +292,8 @@ export default function PortfolioStorage() {
                   </div>
 
                   <div className="border-t border-slate-100 p-3">
-                    <Link href="/setup" className="block w-full text-center px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-bold text-sm transition-colors">
+                    {/* แก้ไขลิงก์ตรงนี้ให้วิ่งไปหน้า /profile/edit */}
+                    <Link href="/profile/edit" className="block w-full text-center px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-bold text-sm transition-colors">
                       แก้ไขโปรไฟล์
                     </Link>
                   </div>
@@ -315,7 +307,6 @@ export default function PortfolioStorage() {
       {/* ================= เนื้อหาหลัก (Main Content) ================= */}
       <div className="max-w-7xl mx-auto px-4 md:px-8 space-y-12 flex flex-col h-full w-full py-8">
         
-        {/* --- โซน 1: กล่องอัปโหลดหลัก --- */}
         <section className="relative w-full flex-shrink-0">
           <div
             onDragOver={uploadStatus === 'idle' ? handleDragOver : undefined}
@@ -323,7 +314,6 @@ export default function PortfolioStorage() {
             onDrop={uploadStatus === 'idle' ? handleMainDrop : undefined}
             className={`relative z-10 rounded-[2rem] px-6 py-10 flex flex-col items-center justify-center transition-all duration-500 ease-out border-[3px] border-dashed w-full ${uploadStatus === 'idle' ? (isDragging ? 'bg-blue-50/90 border-blue-500 scale-[1.01] shadow-2xl shadow-blue-500/20' : 'bg-white border-slate-300 hover:border-blue-400') : 'bg-white border-slate-100 shadow-md border-solid'}`}
           >
-            {/* 1. สถานะรอรับไฟล์ (Idle) */}
             {uploadStatus === 'idle' && (
               <>
                 <div className={`w-16 h-16 flex items-center justify-center rounded-full mb-6 transition-all duration-300 flex-shrink-0 ${isDragging ? 'bg-blue-600 text-white animate-pulse' : 'bg-slate-50 text-blue-600'}`}>
@@ -346,7 +336,6 @@ export default function PortfolioStorage() {
               </>
             )}
 
-            {/* 2. สถานะตรวจสอบและเพิ่มข้อความ (Preview) */}
             {uploadStatus === 'preview' && (
               <div className="flex flex-col items-center animate-in fade-in duration-300 w-full px-4 sm:px-8 py-4">
                 <h3 className="text-2xl md:text-3xl font-extrabold text-slate-800 mb-2 text-center">ตรวจสอบและให้ข้อมูลเพิ่มเติม</h3>
@@ -357,7 +346,6 @@ export default function PortfolioStorage() {
                     <div key={i} className="relative w-28 h-28 flex-shrink-0 rounded-2xl overflow-hidden border border-slate-200 shadow-sm group">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={url} alt={`preview-${i}`} className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-slate-900/10 group-hover:bg-transparent transition-colors"></div>
                     </div>
                   ))}
                 </div>
@@ -385,31 +373,19 @@ export default function PortfolioStorage() {
               </div>
             )}
 
-            {/* 3. สถานะประมวลผล */}
             {uploadStatus === 'processing' && (
               <div className="flex flex-col items-center animate-in fade-in zoom-in duration-500 overflow-hidden flex-shrink-0 w-full py-6">
                 <div className="w-16 h-16 border-4 border-slate-100 border-t-blue-600 rounded-full animate-spin mb-6"></div>
                 <h3 className="text-xl md:text-2xl font-extrabold text-slate-800 mb-2 text-center flex-shrink-0">AI กำลังวิเคราะห์เอกสาร {selectedFiles.length} รายการ...</h3>
-                <div className="text-sm text-slate-500 mb-6 flex flex-col items-center gap-1.5 max-h-24 flex-shrink-0 overflow-y-auto w-full max-w-sm pr-2">
-                  {selectedFiles.slice(0, 3).map((f, i) => (
-                    <span key={i} className="flex items-center gap-2 truncate w-full justify-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 text-blue-500 flex-shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
-                      {f.name}
-                    </span>
-                  ))}
-                  {selectedFiles.length > 3 && <span className="text-xs text-slate-400">และอีก {selectedFiles.length - 3} รายการ...</span>}
-                </div>
               </div>
             )}
 
-            {/* 4. สถานะสำเร็จ */}
             {uploadStatus === 'success' && (
               <div className="flex flex-col items-center animate-in fade-in slide-in-from-bottom-4 duration-500 flex-shrink-0 w-full py-6">
                 <div className="w-20 h-20 bg-green-100 text-green-600 flex items-center justify-center rounded-full mb-6 flex-shrink-0">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-10 h-10 flex-shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
                 </div>
                 <h3 className="text-2xl md:text-3xl font-extrabold text-slate-800 mb-2 text-center flex-shrink-0">วิเคราะห์ {selectedFiles.length} รายการเสร็จสมบูรณ์!</h3>
-                <p className="text-base text-slate-500 mb-8 text-center max-w-md flex-shrink-0">วิเคราะห์ทักษะจากเอกสารและข้อความเรียบร้อยแล้ว</p>
                 <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md justify-center">
                   <button onClick={() => setShowResultModal(true)} className="flex-1 px-6 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-bold text-base transition-all shadow-lg active:scale-95">
                     ดูผลการวิเคราะห์อีกครั้ง
@@ -423,22 +399,10 @@ export default function PortfolioStorage() {
           </div>
         </section>
 
-        {/* --- โซน 2: คลังผลงาน --- */}
+        {/* --- คลังผลงาน --- */}
         <section className="flex flex-col flex-grow pb-10 w-full">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 border-b border-slate-200 pb-4 flex-shrink-0 gap-4">
-            <div className="flex items-baseline gap-4 flex-shrink-0">
-              <h2 className="text-3xl font-extrabold text-slate-800 flex-shrink-0">คลังรูปภาพของฉัน (ล่าสุด)</h2>
-            </div>
-            <div className="flex items-center gap-4 mt-4 sm:mt-0">
-              <button onClick={() => fileInputRef.current?.click()} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm transition-all shadow-md shadow-blue-600/20 active:scale-95 flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-                เพิ่มรูปภาพ
-              </button>
-              <Link href="/gallery" className="group flex items-center gap-2 text-base font-bold text-blue-600 hover:text-blue-800 transition-colors flex-shrink-0">
-                ดูทั้งหมด
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 transform transition-transform group-hover:translate-x-1 flex-shrink-0"><path fillRule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z" clipRule="evenodd" /></svg>
-              </Link>
-            </div>
+            <h2 className="text-3xl font-extrabold text-slate-800 flex-shrink-0">คลังรูปภาพของฉัน (ล่าสุด)</h2>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
@@ -448,23 +412,10 @@ export default function PortfolioStorage() {
                   <div className="absolute top-4 left-4 z-10 bg-white/95 backdrop-blur-sm px-4 py-2 rounded-lg text-xs font-extrabold text-slate-800 shadow-sm flex-shrink-0">{file.type}</div>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={file.imageUrl} alt={file.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out flex-shrink-0" />
-                  <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center backdrop-blur-[2px] flex-shrink-0">
-                    <a href={file.imageUrl} download={file.title} className="transform translate-y-4 group-hover:translate-y-0 transition-all duration-300 bg-white text-blue-600 font-bold px-6 py-3 text-lg rounded-full flex items-center gap-2 shadow-xl hover:bg-blue-50 flex-shrink-0">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 flex-shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
-                      โหลดไฟล์
-                    </a>
-                  </div>
                 </div>
                 <div className="p-6 md:p-8 flex flex-col flex-grow flex-shrink-0">
                   <h3 className="font-extrabold text-slate-800 text-xl truncate flex-shrink-0" title={file.title}>{file.title}</h3>
                   <p className="text-sm font-medium text-slate-500 mt-2 mb-6 flex-shrink-0">Uploaded on {file.date}</p>
-                  
-                  <div className="mt-auto flex-shrink-0">
-                    <div className="inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-2.5 rounded-xl border border-blue-100 flex-shrink-0">
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 flex-shrink-0"><path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clipRule="evenodd" /></svg>
-                      <span className="text-xs font-extrabold tracking-wide uppercase overflow-hidden flex-shrink-0">AI วิเคราะห์ทักษะ: {file.skills}</span>
-                    </div>
-                  </div>
                 </div>
               </div>
             ))}

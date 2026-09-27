@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 type StudentRow = {
   id: string;
@@ -16,18 +17,18 @@ type StudentRow = {
 };
 
 const STUDENTS: StudentRow[] = [
-  { id: 'STU-1001', name: 'Maria Santos', email: 'maria.santos@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'วิทยาการคอมพิวเตอร์', latestUpload: 'Aug 28, 2026', career: 'Software Engineer', files: 6, skills: ['Python', 'SQL', 'Git', 'React'], status: 'analyzed' },
-  { id: 'STU-1002', name: "James O'Brien", email: 'james.obrien@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'วิทยาการข้อมูล', latestUpload: 'Aug 25, 2026', career: 'Data Scientist', files: 4, skills: ['Python', 'Pandas', 'Machine Learning'], status: 'analyzed' },
-  { id: 'STU-1003', name: 'Aiko Tanaka', email: 'aiko.tanaka@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'เทคโนโลยีมัลติมีเดีย', latestUpload: 'Aug 22, 2026', career: 'UX Designer', files: 9, skills: ['Figma', 'User Research', 'Prototyping'], status: 'analyzed' },
-  { id: 'STU-1004', name: 'Carlos Rivera', email: 'carlos.rivera@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'ความมั่นคงปลอดภัยไซเบอร์', latestUpload: 'Aug 20, 2026', career: 'Cybersecurity Analyst', files: 3, skills: ['Linux', 'Networking', 'SIEM'], status: 'pending' },
-  { id: 'STU-1005', name: 'Emily Chen', email: 'emily.chen@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'วิศวกรรมซอฟต์แวร์', latestUpload: 'Sep 01, 2026', career: 'Software Engineer', files: 7, skills: ['TypeScript', 'Next.js', 'Docker'], status: 'analyzed' },
-  { id: 'STU-1006', name: 'David Okonkwo', email: 'david.okonkwo@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'วิทยาการข้อมูล', latestUpload: 'Aug 18, 2026', career: 'Data Scientist', files: 5, skills: ['R', 'Statistics', 'Power BI'], status: 'pending' },
-  { id: 'STU-1007', name: 'Sarah Mitchell', email: 'sarah.mitchell@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'การตลาดดิจิทัล', latestUpload: 'Aug 15, 2026', career: 'Marketing Strategist', files: 2, skills: ['SEO', 'Content', 'Analytics'], status: 'analyzed' },
-  { id: 'STU-1008', name: 'Nattapong Srisai', email: 'nattapong.s@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'การบัญชี', latestUpload: 'Aug 12, 2026', career: 'Finance Analyst', files: 4, skills: ['Excel', 'Accounting', 'Power BI'], status: 'analyzed' },
-  { id: 'STU-1009', name: 'Praewa Chaiyaphum', email: 'praewa.c@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'เทคโนโลยีมัลติมีเดีย', latestUpload: 'Aug 09, 2026', career: 'UX Designer', files: 8, skills: ['Figma', 'Motion', 'Design System'], status: 'analyzed' },
-  { id: 'STU-1010', name: 'Kittipong Meesuk', email: 'kittipong.m@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'วิศวกรรมซอฟต์แวร์', latestUpload: 'Aug 05, 2026', career: 'Software Engineer', files: 3, skills: ['Java', 'Spring', 'MySQL'], status: 'pending' },
-  { id: 'STU-1011', name: 'Wanida Phonsri', email: 'wanida.p@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'การตลาดดิจิทัล', latestUpload: 'Aug 02, 2026', career: 'Marketing Strategist', files: 5, skills: ['Ads', 'Copywriting', 'CRM'], status: 'analyzed' },
-  { id: 'STU-1012', name: 'Somchai Wongdee', email: 'somchai.w@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'ความมั่นคงปลอดภัยไซเบอร์', latestUpload: 'Jul 30, 2026', career: 'Cybersecurity Analyst', files: 6, skills: ['Pentest', 'Python', 'Forensics'], status: 'analyzed' },
+  { id: 'STU-1001', name: 'Maria Santos', email: 'maria.santos@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'วิทยาการคอมพิวเตอร์', latestUpload: 'ส.ค. 28, 2026', career: 'Software Engineer', files: 6, skills: ['Python', 'SQL', 'Git', 'React'], status: 'analyzed' },
+  { id: 'STU-1002', name: "James O'Brien", email: 'james.obrien@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'วิทยาการข้อมูล', latestUpload: 'ส.ค. 25, 2026', career: 'Data Scientist', files: 4, skills: ['Python', 'Pandas', 'Machine Learning'], status: 'analyzed' },
+  { id: 'STU-1003', name: 'Aiko Tanaka', email: 'aiko.tanaka@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'เทคโนโลยีมัลติมีเดีย', latestUpload: 'ส.ค. 22, 2026', career: 'UX Designer', files: 9, skills: ['Figma', 'User Research', 'Prototyping'], status: 'analyzed' },
+  { id: 'STU-1004', name: 'Carlos Rivera', email: 'carlos.rivera@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'ความมั่นคงปลอดภัยไซเบอร์', latestUpload: 'ส.ค. 20, 2026', career: 'Cybersecurity Analyst', files: 3, skills: ['Linux', 'Networking', 'SIEM'], status: 'pending' },
+  { id: 'STU-1005', name: 'Emily Chen', email: 'emily.chen@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'วิศวกรรมซอฟต์แวร์', latestUpload: 'ก.ย. 01, 2026', career: 'Software Engineer', files: 7, skills: ['TypeScript', 'Next.js', 'Docker'], status: 'analyzed' },
+  { id: 'STU-1006', name: 'David Okonkwo', email: 'david.okonkwo@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'วิทยาการข้อมูล', latestUpload: 'ส.ค. 18, 2026', career: 'Data Scientist', files: 5, skills: ['R', 'Statistics', 'Power BI'], status: 'pending' },
+  { id: 'STU-1007', name: 'Sarah Mitchell', email: 'sarah.mitchell@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'การตลาดดิจิทัล', latestUpload: 'ส.ค. 15, 2026', career: 'Marketing Strategist', files: 2, skills: ['SEO', 'Content', 'Analytics'], status: 'analyzed' },
+  { id: 'STU-1008', name: 'Nattapong Srisai', email: 'nattapong.s@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'การบัญชี', latestUpload: 'ส.ค. 12, 2026', career: 'Finance Analyst', files: 4, skills: ['Excel', 'Accounting', 'Power BI'], status: 'analyzed' },
+  { id: 'STU-1009', name: 'Praewa Chaiyaphum', email: 'praewa.c@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'เทคโนโลยีมัลติมีเดีย', latestUpload: 'ส.ค. 09, 2026', career: 'UX Designer', files: 8, skills: ['Figma', 'Motion', 'Design System'], status: 'analyzed' },
+  { id: 'STU-1010', name: 'Kittipong Meesuk', email: 'kittipong.m@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'วิศวกรรมซอฟต์แวร์', latestUpload: 'ส.ค. 05, 2026', career: 'Software Engineer', files: 3, skills: ['Java', 'Spring', 'MySQL'], status: 'pending' },
+  { id: 'STU-1011', name: 'Wanida Phonsri', email: 'wanida.p@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'การตลาดดิจิทัล', latestUpload: 'ส.ค. 02, 2026', career: 'Marketing Strategist', files: 5, skills: ['Ads', 'Copywriting', 'CRM'], status: 'analyzed' },
+  { id: 'STU-1012', name: 'Somchai Wongdee', email: 'somchai.w@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'ความมั่นคงปลอดภัยไซเบอร์', latestUpload: 'ก.ค. 30, 2026', career: 'Cybersecurity Analyst', files: 6, skills: ['Pentest', 'Python', 'Forensics'], status: 'analyzed' },
 ];
 
 type PortfolioFile = {
@@ -51,6 +52,16 @@ const CAREER_ORDER = ['Software Engineer', 'Data Scientist', 'UX Designer', 'Cyb
 const PAGE_SIZE = 7;
 
 export default function AdminDashboard() {
+  const router = useRouter();
+
+  useEffect(() => {
+    const role = localStorage.getItem('userRole');
+    // ถ้าไม่ใช่ admin ให้เด้งกลับหน้า Login ทันที
+    if (role !== 'admin') {
+      router.push('/');
+    }
+  }, [router]);
+
   const [rows, setRows] = useState<StudentRow[]>(STUDENTS);
   const [search, setSearch] = useState('');
   const [careerFilter, setCareerFilter] = useState('all');
@@ -110,10 +121,10 @@ export default function AdminDashboard() {
         <div className="max-w-[1400px] mx-auto px-4 md:px-8 py-4 flex justify-between items-center">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-full bg-blue-600 text-white font-black flex items-center justify-center">E</div>
-            <span className="text-lg font-extrabold text-slate-800">Executive Dashboard</span>
+            <span className="text-lg font-extrabold text-slate-800">แดชบอร์ดผู้บริหาร</span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="hidden sm:block text-sm font-bold text-slate-600">Admin User</span>
+            <span className="hidden sm:block text-sm font-bold text-slate-600">ผู้ดูแลระบบ</span>
             <div className="w-9 h-9 rounded-full bg-slate-900 text-white font-black flex items-center justify-center">A</div>
           </div>
         </div>
@@ -122,19 +133,19 @@ export default function AdminDashboard() {
       <div className="max-w-[1400px] mx-auto px-4 md:px-8 py-8 space-y-10">
         {/* ================= STATISTICS ================= */}
         <section className="space-y-4">
-          <h2 className="text-xl font-extrabold text-slate-800">System Statistics &amp; Insights</h2>
+          <h2 className="text-xl font-extrabold text-slate-800">สถิติและข้อมูลเชิงลึกของระบบ</h2>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="space-y-4">
-              <StatCard label="Total Students" value={rows.length.toLocaleString()} hint={`${analyzedCount} analyzed / ${rows.length - analyzedCount} pending`} tone="blue" />
-              <StatCard label="Portfolios Analyzed" value={portfolioCount.toLocaleString()} hint="รวมไฟล์ที่ผ่านการวิเคราะห์ทั้งระบบ" tone="green" />
-              <StatCard label="Top Skill Found" value={topSkill} hint="ทักษะที่พบบ่อยที่สุดจากพอร์ตโฟลิโอ" tone="amber" />
+              <StatCard label="จำนวนนักศึกษาทั้งหมด" value={rows.length.toLocaleString()} hint={`${analyzedCount} วิเคราะห์แล้ว / ${rows.length - analyzedCount} รอวิเคราะห์`} tone="blue" />
+              <StatCard label="พอร์ตโฟลิโอที่วิเคราะห์แล้ว" value={portfolioCount.toLocaleString()} hint="รวมไฟล์ที่ผ่านการวิเคราะห์ทั้งระบบ" tone="green" />
+              <StatCard label="ทักษะยอดนิยมสูงสุด" value={topSkill} hint="ทักษะที่พบบ่อยที่สุดจากพอร์ตโฟลิโอ" tone="amber" />
             </div>
 
             <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
               <div className="flex items-start justify-between gap-4 mb-8">
                 <div>
-                  <h3 className="font-extrabold text-slate-800">Recommended Career Distribution for Curriculum Planning</h3>
+                  <h3 className="font-extrabold text-slate-800">การกระจายสายอาชีพที่แนะนำสำหรับการพัฒนาหลักสูตร</h3>
                   <p className="text-xs font-medium text-slate-400 mt-1">ใช้วางแผนหลักสูตรจากสายอาชีพที่ AI แนะนำให้นักศึกษา</p>
                 </div>
                 <span className="text-[11px] font-extrabold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full whitespace-nowrap">ภาคเรียนล่าสุด</span>
@@ -160,7 +171,7 @@ export default function AdminDashboard() {
         <section className="space-y-4">
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
             <div>
-              <h2 className="text-xl font-extrabold text-slate-800">Student Portfolios Review</h2>
+              <h2 className="text-xl font-extrabold text-slate-800">ตรวจสอบพอร์ตโฟลิโอนักศึกษา</h2>
               <p className="text-xs font-medium text-slate-400 mt-1">พบ {filtered.length} รายการจากทั้งหมด {rows.length} รายการ</p>
             </div>
 
@@ -205,12 +216,12 @@ export default function AdminDashboard() {
               <table className="w-full text-left">
                 <thead className="bg-slate-50 border-b border-slate-100">
                   <tr>
-                    <th className="px-6 py-3.5 text-xs font-bold text-slate-500">Student ID</th>
-                    <th className="px-6 py-3.5 text-xs font-bold text-slate-500">Name</th>
-                    <th className="px-6 py-3.5 text-xs font-bold text-slate-500">Latest Upload</th>
-                    <th className="px-6 py-3.5 text-xs font-bold text-slate-500">AI Recommended Career</th>
-                    <th className="px-6 py-3.5 text-xs font-bold text-slate-500">Status</th>
-                    <th className="px-6 py-3.5 text-xs font-bold text-slate-500">Actions</th>
+                    <th className="px-6 py-3.5 text-xs font-bold text-slate-500">รหัสนักศึกษา</th>
+                    <th className="px-6 py-3.5 text-xs font-bold text-slate-500">ชื่อ-นามสกุล</th>
+                    <th className="px-6 py-3.5 text-xs font-bold text-slate-500">อัปโหลดล่าสุด</th>
+                    <th className="px-6 py-3.5 text-xs font-bold text-slate-500">สายอาชีพที่ AI แนะนำ</th>
+                    <th className="px-6 py-3.5 text-xs font-bold text-slate-500">สถานะ</th>
+                    <th className="px-6 py-3.5 text-xs font-bold text-slate-500">การจัดการ</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -231,7 +242,7 @@ export default function AdminDashboard() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <button onClick={() => setViewing(row)} className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-bold transition-colors active:scale-95">
-                            View
+                            ดูข้อมูล
                           </button>
                           <button onClick={() => setDeleting(row)} aria-label={`ลบ ${row.name}`} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">

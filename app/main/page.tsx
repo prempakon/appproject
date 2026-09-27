@@ -534,7 +534,7 @@ export default function PortfolioStorage() {
       )}
 
       {/* ================= NAVBAR / HEADER ================= */}
-      <header className="w-full bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+      <header className="w-full bg-white/85 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-40 shadow-[0_1px_12px_rgba(15,23,42,0.05)]">
         <div className="max-w-7xl mx-auto px-4 md:px-8 py-4 flex justify-between items-center">
           <div className="text-2xl font-black text-blue-600 tracking-tight flex items-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-7 h-7">
@@ -656,7 +656,7 @@ export default function PortfolioStorage() {
             onDragOver={uploadStatus === 'idle' ? handleDragOver : undefined}
             onDragLeave={uploadStatus === 'idle' ? handleDragLeave : undefined}
             onDrop={uploadStatus === 'idle' ? handleMainDrop : undefined}
-            className={`relative z-10 rounded-[2rem] px-6 py-10 flex flex-col items-center justify-center transition-all duration-500 ease-out border-[3px] border-dashed w-full ${uploadStatus === 'idle' ? (isDragging ? 'bg-blue-50/90 border-blue-500 scale-[1.01] shadow-2xl shadow-blue-500/20' : 'bg-white border-slate-300 hover:border-blue-400') : 'bg-white border-slate-100 shadow-md border-solid'}`}
+            className={`relative z-10 rounded-[2rem] px-6 py-10 flex flex-col items-center justify-center transition-all duration-500 ease-out border-[3px] border-dashed w-full ${uploadStatus === 'idle' ? (isDragging ? 'bg-blue-50/90 border-blue-500 scale-[1.01] shadow-[0_20px_50px_-20px_rgba(37,99,235,0.45)]' : 'bg-white border-slate-300/80 hover:border-blue-400 shadow-[0_8px_30px_rgba(15,23,42,0.04)]') : 'bg-white border-slate-100 shadow-[0_8px_30px_rgba(15,23,42,0.05)] border-solid'}`}
           >
             {uploadStatus === 'idle' && (
               <>
@@ -751,7 +751,7 @@ export default function PortfolioStorage() {
         {/* --- คลังผลงาน --- */}
         <section className="flex flex-col flex-grow pb-10 w-full">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 border-b border-slate-200 pb-4 flex-shrink-0 gap-4">
-            <h2 className="text-3xl font-extrabold text-slate-800 flex-shrink-0">คลังรูปภาพของฉัน</h2>
+            <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 flex-shrink-0">คลังรูปภาพของฉัน</h2>
             <div className="flex items-center gap-3">
               <button onClick={() => galleryFileInputRef.current?.click()} disabled={gallerySaving} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-bold text-sm transition-all shadow-sm whitespace-nowrap disabled:opacity-60">
                 {gallerySaving ? 'กำลังเพิ่มลงคลัง...' : '+ เพิ่มรูปจากเครื่องสู่คลัง'}
@@ -778,7 +778,7 @@ export default function PortfolioStorage() {
               const card = { id: `db-${file.id}`, title: file.title, imageUrl: file.file_url, type: file.file_type };
               const selected = gallerySelected.some((f) => f.id === card.id);
               return (
-              <div key={file.id} onClick={() => toggleGalleryCard(card)} title="คลิกเพื่อเลือกหลายรูป" className={`group bg-white rounded-3xl shadow-sm hover:shadow-xl border-2 transition-all duration-300 overflow-hidden flex flex-col flex-shrink-0 cursor-pointer relative ${selected ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-blue-100'}`}>
+              <div key={file.id} onClick={() => toggleGalleryCard(card)} title="คลิกเพื่อเลือกหลายรูป" className={`group bg-white rounded-3xl shadow-[0_2px_12px_rgba(15,23,42,0.05)] hover:shadow-[0_16px_40px_-16px_rgba(15,23,42,0.18)] border-2 transition-all duration-300 overflow-hidden flex flex-col flex-shrink-0 cursor-pointer relative ${selected ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-slate-100'}`}>
                 {selected && (
                   <div className="absolute top-3 right-3 z-20 bg-blue-600 text-white p-1.5 rounded-full shadow-md">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" /></svg>

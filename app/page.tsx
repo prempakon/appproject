@@ -160,7 +160,7 @@ export default function LoginPage() {
         </div>
       )}
 
-      <div className="bg-white w-full max-w-[460px] rounded-3xl shadow-2xl p-10 sm:p-12 relative flex flex-col justify-center border border-gray-100 animate-in fade-in zoom-in-95 duration-500">
+      <div className="bg-white w-full max-w-[460px] rounded-3xl shadow-[0_24px_70px_-24px_rgba(30,64,175,0.28)] p-10 sm:p-12 relative flex flex-col justify-center border border-slate-200/70 animate-in fade-in zoom-in-95 duration-500">
         
         <div className="mb-8 mt-2 text-center">
           <h1 className="text-3xl font-bold text-gray-900 tracking-tight">

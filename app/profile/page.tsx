@@ -48,7 +48,7 @@ export default function ProfilePage() {
 
   return (
     <main className="min-h-screen bg-[#f0f4fd] p-6 sm:p-10 flex flex-col items-center">
-      <div className="bg-white w-full max-w-xl rounded-[2.5rem] shadow-xl p-8 sm:p-10 border border-slate-100 space-y-6">
+      <div className="bg-white w-full max-w-xl rounded-[2.5rem] shadow-[0_24px_70px_-24px_rgba(30,64,175,0.22)] p-8 sm:p-10 border border-slate-200/70 space-y-6">
         
         {/* Header Profile */}
         <div className="flex items-center gap-5 border-b border-slate-100 pb-6">

@@ -129,7 +129,7 @@ export default function EditProfilePage() {
 
   return (
     <main className="min-h-screen bg-[#f0f4fd] flex items-center justify-center p-4 sm:p-6">
-      <div className="bg-white w-full max-w-xl rounded-[2.5rem] shadow-xl p-6 sm:p-8 border border-slate-100 my-auto">
+      <div className="bg-white w-full max-w-xl rounded-[2.5rem] shadow-[0_24px_70px_-24px_rgba(30,64,175,0.22)] p-6 sm:p-8 border border-slate-200/70 my-auto">
         
         <div className="text-center mb-6">
           <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">แก้ไขโปรไฟล์ส่วนตัว</h2>

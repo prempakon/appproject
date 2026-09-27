@@ -51,7 +51,7 @@ export default function GalleryPage() {
 
           {/* 2. ตรงกลาง: หัวข้อ (จัด text-center กลางจอ) */}
           <div className="w-full md:w-1/3 flex flex-col items-center text-center">
-            <h1 className="text-2xl md:text-3xl font-extrabold text-slate-800 mb-1.5">ไฟล์ทั้งหมดของฉัน</h1>
+            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-800 mb-1.5">ไฟล์ทั้งหมดของฉัน</h1>
             <p className="text-sm md:text-base text-slate-500 font-medium">จัดการและดูไฟล์ที่คุณอัปโหลดไว้ทั้งหมดที่นี่</p>
           </div>
 
@@ -71,7 +71,7 @@ export default function GalleryPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
           
           {allFiles.map((file) => (
-            <div key={file.id} className="group bg-white rounded-2xl shadow-sm hover:shadow-lg border border-slate-100 transition-all duration-300 overflow-hidden flex flex-col">
+            <div key={file.id} className="group bg-white rounded-2xl shadow-[0_2px_12px_rgba(15,23,42,0.05)] hover:shadow-[0_16px_40px_-16px_rgba(15,23,42,0.18)] border border-slate-100 transition-all duration-300 overflow-hidden flex flex-col">
               
               <div className="aspect-[4/3] bg-slate-100 relative overflow-hidden">
                 <div className="absolute top-3 left-3 z-10 bg-white/95 backdrop-blur-sm px-2.5 py-1 rounded-md text-[10px] font-extrabold text-slate-800 shadow-sm">

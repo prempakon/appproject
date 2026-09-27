@@ -98,7 +98,7 @@ export default function SetupPage() {
 
   return (
     <main className="min-h-screen bg-[#f0f4fd] flex items-center justify-center p-4 py-10">
-      <div className="bg-white w-full max-w-xl rounded-[2.5rem] shadow-xl p-8 sm:p-10 animate-in slide-in-from-bottom-4 duration-500 border border-slate-100">
+      <div className="bg-white w-full max-w-xl rounded-[2.5rem] shadow-[0_24px_70px_-24px_rgba(30,64,175,0.22)] p-8 sm:p-10 animate-in slide-in-from-bottom-4 duration-500 border border-slate-200/70">
         
         <div className="text-center mb-8">
           <h2 className="text-3xl font-black text-slate-900 tracking-tight">สมัครสมาชิกใหม่</h2>

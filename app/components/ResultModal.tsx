@@ -4,10 +4,39 @@ interface ResultModalProps {
   isOpen: boolean;
   onClose: () => void;
   files: File[];
+  analyzedAt?: string | null;
+  notice?: string | null;
+  analysis?: {
+    skills: string[];
+    career: string | null;
+    accuracy: number;
+    technical: number;
+    soft: number;
+    management: number;
+    recommendations: { title: string; detail: string }[];
+    warnings?: string[];
+    rawInput?: string | null;
+    textWarning?: string | null;
+  } | null;
 }
 
-export default function ResultModal({ isOpen, onClose, files }: ResultModalProps) {
+const MOCK_SKILLS = ['Python', 'Data Analysis', 'Machine Learning', 'SQL', 'UX Design', 'Project Management', 'Communication', 'Leadership'];
+
+export default function ResultModal({ isOpen, onClose, files, analyzedAt, notice, analysis }: ResultModalProps) {
   if (!isOpen) return null;
+
+  const analyzedLabel = analyzedAt ?? new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  const skills = analysis ? analysis.skills : MOCK_SKILLS;
+  const accuracy = analysis?.accuracy ?? 85;
+  const technical = analysis?.technical ?? 90;
+  const soft = analysis?.soft ?? 65;
+  const management = analysis?.management ?? 50;
+  const career = analysis?.career ?? 'วิศวกรซอฟต์แวร์ (ระดับสูง)';
+  const recommendations = analysis && analysis.recommendations.length > 0 ? analysis.recommendations : null;
+  const warnings = analysis?.warnings && analysis.warnings.length > 0 ? analysis.warnings : null;
+  const rawInput = analysis?.rawInput?.trim() ? analysis.rawInput.trim() : null;
+  const textWarning = analysis?.textWarning?.trim() ? analysis.textWarning.trim() : null;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
@@ -44,13 +73,16 @@ export default function ResultModal({ isOpen, onClose, files }: ResultModalProps
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
               </svg>
-              วิเคราะห์เมื่อ: 24 ตุลาคม 2567
+              วิเคราะห์เมื่อ: {analyzedLabel}
             </span>
           </div>
         </div>
 
         {/* ส่วนเนื้อหา Body */}
         <div className="p-6 md:p-8 overflow-y-auto flex-grow space-y-8 bg-white custom-scrollbar">
+          {notice && (
+            <p className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">⚠ {notice}</p>
+          )}
           
           {/* Card 1: สัดส่วนทักษะและความแม่นยำ */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -60,16 +92,16 @@ export default function ResultModal({ isOpen, onClose, files }: ResultModalProps
               <div className="relative w-28 h-28 flex items-center justify-center mb-4">
                 <svg className="w-full h-full transform -rotate-90">
                   <circle cx="56" cy="56" r="46" stroke="currentColor" strokeWidth="10" fill="transparent" className="text-blue-100" />
-                  <circle cx="56" cy="56" r="46" stroke="currentColor" strokeWidth="10" fill="transparent" strokeDasharray="289" strokeDashoffset="43" className="text-blue-600 drop-shadow-md" strokeLinecap="round" />
+                  <circle cx="56" cy="56" r="46" stroke="currentColor" strokeWidth="10" fill="transparent" strokeDasharray="289" strokeDashoffset={289 - (289 * accuracy) / 100} className="text-blue-600 drop-shadow-md" strokeLinecap="round" />
                 </svg>
                 <div className="absolute flex flex-col items-center justify-center">
-                  <span className="text-3xl font-extrabold text-slate-800">85%</span>
+                  <span className="text-3xl font-extrabold text-slate-800">{accuracy}%</span>
                   <span className="text-[10px] font-bold text-slate-400 mt-1">ความแม่นยำ</span>
                 </div>
               </div>
               <div className="text-center mt-2">
                 <p className="text-xs font-bold text-slate-800 mb-1">ความสอดคล้องสายงาน</p>
-                <p className="text-xs text-slate-500">วิศวกรซอฟต์แวร์ (ระดับสูง)</p>
+                <p className="text-xs text-slate-500">{career}</p>
               </div>
             </div>
 
@@ -84,7 +116,7 @@ export default function ResultModal({ isOpen, onClose, files }: ResultModalProps
                     <span className="text-slate-800">ทักษะเฉพาะทาง (Technical)</span>
                   </div>
                   <div className="w-full bg-slate-200 rounded-full h-2">
-                    <div className="bg-blue-500 h-2 rounded-full" style={{ width: '90%' }}></div>
+                    <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${technical}%` }}></div>
                   </div>
                   <p className="text-[10px] text-slate-400 mt-1">ความเชี่ยวชาญการเขียนโค้ดและระบบ</p>
                 </div>
@@ -95,7 +127,7 @@ export default function ResultModal({ isOpen, onClose, files }: ResultModalProps
                     <span className="text-slate-800">ทักษะทั่วไป (Soft Skills)</span>
                   </div>
                   <div className="w-full bg-slate-200 rounded-full h-2">
-                    <div className="bg-purple-500 h-2 rounded-full" style={{ width: '65%' }}></div>
+                    <div className="bg-purple-500 h-2 rounded-full" style={{ width: `${soft}%` }}></div>
                   </div>
                   <p className="text-[10px] text-slate-400 mt-1">การสื่อสารและการทำงานร่วมกัน</p>
                 </div>
@@ -106,7 +138,7 @@ export default function ResultModal({ isOpen, onClose, files }: ResultModalProps
                     <span className="text-slate-800">การบริหารจัดการ (Management)</span>
                   </div>
                   <div className="w-full bg-slate-200 rounded-full h-2">
-                    <div className="bg-indigo-500 h-2 rounded-full" style={{ width: '50%' }}></div>
+                    <div className="bg-indigo-500 h-2 rounded-full" style={{ width: `${management}%` }}></div>
                   </div>
                   <p className="text-[10px] text-slate-400 mt-1">การส่งมอบงานและการวางแผน</p>
                 </div>
@@ -118,19 +150,46 @@ export default function ResultModal({ isOpen, onClose, files }: ResultModalProps
           <div>
             <div className="flex items-center gap-3 mb-4">
               <h4 className="text-sm font-extrabold text-slate-800">ทักษะที่ตรวจพบจากเอกสาร</h4>
-              <span className="bg-blue-50 text-blue-600 text-[10px] font-bold px-2 py-0.5 rounded border border-blue-100">8 ทักษะใหม่</span>
+              <span className="bg-blue-50 text-blue-600 text-[10px] font-bold px-2 py-0.5 rounded border border-blue-100">{skills.length} ทักษะใหม่</span>
             </div>
             <div className="flex flex-wrap gap-2.5">
-              <span className="px-3 py-1.5 text-xs font-bold rounded-md bg-purple-50 text-purple-700 border border-purple-100">Python</span>
-              <span className="px-3 py-1.5 text-xs font-bold rounded-md bg-blue-50 text-blue-700 border border-blue-100">Data Analysis</span>
-              <span className="px-3 py-1.5 text-xs font-bold rounded-md bg-purple-50 text-purple-700 border border-purple-100">Machine Learning</span>
-              <span className="px-3 py-1.5 text-xs font-bold rounded-md bg-blue-50 text-blue-700 border border-blue-100">SQL</span>
-              <span className="px-3 py-1.5 text-xs font-bold rounded-md bg-orange-50 text-orange-700 border border-orange-100">UX Design</span>
-              <span className="px-3 py-1.5 text-xs font-bold rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100">Project Management</span>
-              <span className="px-3 py-1.5 text-xs font-bold rounded-md bg-pink-50 text-pink-700 border border-pink-100">Communication</span>
-              <span className="px-3 py-1.5 text-xs font-bold rounded-md bg-pink-50 text-pink-700 border border-pink-100">Leadership</span>
+              {skills.length > 0 ? (
+                skills.map((skill, i) => (
+                  <span key={`${skill}-${i}`} className="px-3 py-1.5 text-xs font-bold rounded-md bg-blue-50 text-blue-700 border border-blue-100">{skill}</span>
+                ))
+              ) : (
+                <p className="text-xs font-medium text-slate-500">ไม่พบทักษะจากไฟล์ที่ส่ง — ดูรายการไฟล์ที่ AI ไม่นับด้านล่าง</p>
+              )}
             </div>
           </div>
+
+          {/* สิ่งที่นักศึกษาพิมพ์ + คำเตือนข้อความไม่เกี่ยว */}
+          {rawInput && (
+            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5">
+              <h4 className="text-sm font-extrabold text-slate-800 mb-2">สิ่งที่คุณพิมพ์บอก AI</h4>
+              <p className="text-xs font-medium text-slate-600 whitespace-pre-line">{rawInput}</p>
+              {textWarning && (
+                <p className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mt-3">⚠ {textWarning}</p>
+              )}
+            </div>
+          )}
+
+          {/* เตือนไฟล์ที่ไม่ใช่ผลงาน (AI ไม่นับเป็นทักษะ) */}
+          {warnings && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
+              <h4 className="text-sm font-extrabold text-amber-800 mb-3 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                </svg>
+                ไฟล์ที่ AI ไม่นับเป็นผลงาน ({warnings.length})
+              </h4>
+              <ul className="space-y-1.5">
+                {warnings.map((w, i) => (
+                  <li key={i} className="text-xs font-medium text-amber-800">• {w}</li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Card 3: คำแนะนำจาก AI */}
           <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5">
@@ -142,6 +201,22 @@ export default function ResultModal({ isOpen, onClose, files }: ResultModalProps
             </h4>
             
             <div className="space-y-4">
+              {recommendations ? (
+                recommendations.map((rec, i) => (
+                  <div key={i} className="flex gap-4">
+                    <div className={`mt-1 flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${i % 2 === 0 ? 'bg-indigo-100 text-indigo-600' : 'bg-pink-100 text-pink-600'}`}>
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-xs font-extrabold text-slate-800 mb-0.5">{rec.title}</p>
+                      <p className="text-[11px] text-slate-500">{rec.detail}</p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <>
               {/* Item 1 */}
               <div className="flex gap-4">
                 <div className="mt-1 flex-shrink-0 w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center">
@@ -168,6 +243,8 @@ export default function ResultModal({ isOpen, onClose, files }: ResultModalProps
                   <p className="text-[11px] text-slate-500">ช่วยเสริมทักษะการบริหารจัดการ (Management) และการทำงานจริงเป็นทีมซึ่งส่งผลดีต่อ Soft Skills</p>
                 </div>
               </div>
+                </>
+              )}
             </div>
           </div>
 

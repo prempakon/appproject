@@ -36,6 +36,13 @@ export async function uploadPortfolioReal(userId: string, file: File) {
 export async function saveAnalysisReal(userId: string, portfolioId: string, input: {
   skills: string[];
   career?: string | null;
+  accuracy?: number;
+  technical?: number;
+  soft?: number;
+  management?: number;
+  recommendations?: { title: string; detail: string }[];
+  rawInput?: string | null;
+  warnings?: string[];
 }) {
   const { data, error } = await supabase
     .from('analysis_results')
@@ -44,11 +51,13 @@ export async function saveAnalysisReal(userId: string, portfolioId: string, inpu
       portfolio_id: portfolioId,
       skills: input.skills,
       career: input.career ?? null,
-      accuracy: 85,
-      technical: 90,
-      soft: 65,
-      management: 50,
-      recommendations: [],
+      accuracy: input.accuracy ?? 85,
+      technical: input.technical ?? 90,
+      soft: input.soft ?? 65,
+      management: input.management ?? 50,
+      recommendations: input.recommendations ?? [],
+      raw_input: input.rawInput ?? null,
+      warnings: input.warnings ?? [],
     })
     .select()
     .single();

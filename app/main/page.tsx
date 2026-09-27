@@ -27,6 +27,8 @@ export default function PortfolioStorage() {
   const [additionalSkillsText, setAdditionalSkillsText] = useState('');
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [selectedExistingIds, setSelectedExistingIds] = useState<(string | null)[]>([]);
+  const [resultDate, setResultDate] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [showResultModal, setShowResultModal] = useState(false);
   const [isHistoryDropdownOpen, setIsHistoryDropdownOpen] = useState(false);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
@@ -38,15 +40,66 @@ export default function PortfolioStorage() {
   const [gallerySaving, setGallerySaving] = useState(false);
 
   const [userProfile, setUserProfile] = useState<UserProfile>({ name: 'User', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150' });
+  const [aiResult, setAiResult] = useState<{
+    skills: string[];
+    career: string | null;
+    accuracy: number;
+    technical: number;
+    soft: number;
+    management: number;
+    recommendations: { title: string; detail: string }[];
+    warnings: string[];
+    rawInput: string | null;
+    textWarning: string | null;
+  } | null>(null);
   const [myPortfolios, setMyPortfolios] = useState<{ id: string; title: string; file_url: string; file_type: string; created_at: string }[]>([]);
+  const [myHistory, setMyHistory] = useState<{
+    id: string;
+    title: string;
+    analyzedAt: string;
+    skills: string;
+    type: string;
+    analysis: {
+      skills: string[];
+      career: string | null;
+      accuracy: number;
+      technical: number;
+      soft: number;
+      management: number;
+      recommendations: { title: string; detail: string }[];
+      warnings: string[];
+      rawInput: string | null;
+      textWarning: string | null;
+    };
+  }[]>([]);
 
   const refreshMyPortfolios = async () => {
     try {
       const { getSessionUser } = await import('../../lib/auth');
-      const { listMyPortfolios } = await import('../../lib/profiles');
+      const { listMyPortfolios, listMyAnalyses } = await import('../../lib/profiles');
       const user = await getSessionUser();
       if (!user) return;
       setMyPortfolios(await listMyPortfolios(user.id));
+      const analyses = await listMyAnalyses(user.id);
+      setMyHistory(analyses.map((a) => ({
+        id: a.id,
+        title: a.portfolio_title,
+        analyzedAt: new Date(a.analyzed_at).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+        skills: `พบ ${a.skills.length} ทักษะ`,
+        type: 'DB',
+        analysis: {
+          skills: a.skills,
+          career: a.career,
+          accuracy: a.accuracy,
+          technical: a.technical,
+          soft: a.soft,
+          management: a.management,
+          recommendations: a.recommendations,
+          warnings: a.warnings ?? [],
+          rawInput: a.raw_input ?? null,
+          textWarning: null,
+        },
+      })));
     } catch {
       // เงียบไว้ ใช้ mock เดิม
     }
@@ -93,7 +146,94 @@ export default function PortfolioStorage() {
 
   const startAIProcessing = async () => {
     setUploadStatus('processing');
-    // ทางจริง: ไฟล์จากเครื่องอัปโหลดใหม่ / ไฟล์จากคลังใช้แถวเดิมแล้วบันทึกผลวิเคราะห์เพิ่ม (พังก็ยังโชว์ mock ต่อได้)
+    setAiResult(null);
+    setNotice(null);
+    // 1) เรียก Gemini วิเคราะห์ (ไฟล์จริง + ข้อความอาชีพที่สนใจ)
+    let ai: {
+      skills: string[];
+      career: string | null;
+      accuracy: number;
+      technical: number;
+      soft: number;
+      management: number;
+      recommendations: { title: string; detail: string }[];
+      warnings: string[];
+      rawInput: string | null;
+      textWarning: string | null;
+    } | null = null;
+    // ย่อรูปก่อนส่งให้ AI (ประหยัดโควต้า token + เร็วขึ้น ไฟล์ต้นฉบับยังอัปโหลดเต็มขนาด)
+    const downscaleImage = (file: File, maxSide = 1280): Promise<File> => {
+      return new Promise((resolve) => {
+        if (!file.type.startsWith('image/')) {
+          resolve(file);
+          return;
+        }
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+          const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+          if (scale >= 1) {
+            URL.revokeObjectURL(url);
+            resolve(file);
+            return;
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          canvas.getContext('2d')?.drawImage(img, 0, 0, canvas.width, canvas.height);
+          URL.revokeObjectURL(url);
+          canvas.toBlob(
+            (blob) => resolve(blob ? new File([blob], file.name.replace(/\.\w+$/, '.jpg'), { type: 'image/jpeg' }) : file),
+            'image/jpeg',
+            0.85,
+          );
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(url);
+          resolve(file);
+        };
+        img.src = url;
+      });
+    };
+
+    try {
+      const form = new FormData();
+      form.append('interestText', additionalSkillsText);
+      form.append('major', userProfile.major || '');
+      form.append('institution', userProfile.institution || '');
+      for (const f of selectedFiles) {
+        if (f.size <= 0) continue;
+        form.append('files', await downscaleImage(f), f.name);
+      }
+      const res = await fetch('/api/analyze', { method: 'POST', body: form });
+      if (res.ok) {
+        const data = await res.json();
+        if ((data as { _mock?: boolean })._mock) {
+          const reason = String((data as { _reason?: string })._reason ?? '');
+          setNotice(/429|quota/i.test(reason)
+            ? 'โควต้า AI เต็มชั่วคราว (429) ผลนี้เป็นค่าตัวอย่าง — รอ 1-2 นาทีแล้ววิเคราะห์ใหม่'
+            : 'AI ขัดข้องชั่วคราว ผลนี้เป็นค่าตัวอย่าง — ลองวิเคราะห์ใหม่อีกครั้ง');
+        }
+        if (Array.isArray(data.skills)) {
+          ai = {
+            skills: data.skills,
+            career: data.career ?? null,
+            accuracy: data.accuracy ?? 85,
+            technical: data.technical ?? 90,
+            soft: data.soft ?? 65,
+            management: data.management ?? 50,
+            recommendations: Array.isArray(data.recommendations) ? data.recommendations : [],
+            warnings: Array.isArray(data.warnings) ? data.warnings : [],
+            rawInput: additionalSkillsText.trim() ? additionalSkillsText.trim() : null,
+            textWarning: typeof data.textWarning === 'string' ? data.textWarning : null,
+          };
+          setAiResult(ai);
+        }
+      }
+    } catch {
+      // พังก็ใช้ mock + บันทึกค่าเริ่มต้นต่อได้
+    }
+    // 2) ทางจริง: ไฟล์จากเครื่องอัปโหลดใหม่ / ไฟล์จากคลังใช้แถวเดิมแล้วบันทึกผลวิเคราะห์เพิ่ม
     try {
       const { getSessionUser } = await import('../../lib/auth');
       const { uploadPortfolioReal, saveAnalysisReal } = await import('../../lib/storage');
@@ -105,14 +245,28 @@ export default function PortfolioStorage() {
           try {
             if (existingId) {
               await saveAnalysisReal(user.id, existingId, {
-                skills: additionalSkillsText ? [additionalSkillsText] : ['Python', 'SQL'],
-                career: null,
+                skills: ai?.skills ?? (additionalSkillsText ? [additionalSkillsText] : ['Python', 'SQL']),
+                career: ai?.career ?? null,
+                accuracy: ai?.accuracy,
+                technical: ai?.technical,
+                soft: ai?.soft,
+                management: ai?.management,
+                recommendations: ai?.recommendations,
+                rawInput: ai?.rawInput ?? (additionalSkillsText.trim() ? additionalSkillsText.trim() : null),
+                warnings: ai?.warnings,
               });
             } else if (f.size > 0) {
               const row = await uploadPortfolioReal(user.id, f);
               await saveAnalysisReal(user.id, (row as { id: string }).id, {
-                skills: additionalSkillsText ? [additionalSkillsText] : ['Python', 'SQL'],
-                career: null,
+                skills: ai?.skills ?? (additionalSkillsText ? [additionalSkillsText] : ['Python', 'SQL']),
+                career: ai?.career ?? null,
+                accuracy: ai?.accuracy,
+                technical: ai?.technical,
+                soft: ai?.soft,
+                management: ai?.management,
+                recommendations: ai?.recommendations,
+                rawInput: ai?.rawInput ?? (additionalSkillsText.trim() ? additionalSkillsText.trim() : null),
+                warnings: ai?.warnings,
               });
             }
           } catch {
@@ -125,6 +279,7 @@ export default function PortfolioStorage() {
     }
     setTimeout(() => {
       setUploadStatus('success');
+      setResultDate(new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' }));
       setShowResultModal(true);
       refreshMyPortfolios();
     }, 4000);
@@ -133,6 +288,14 @@ export default function PortfolioStorage() {
   const openHistoryModal = (fileData: any) => {
     const mockFile = new File([''], fileData.title, { type: fileData.type === 'PDF' ? 'application/pdf' : 'image/jpeg' });
     setSelectedFiles([mockFile]);
+    setSelectedExistingIds([null]);
+    // ถ้าเป็นประวัติจริง ส่งผลวิเคราะห์จริงเข้า modal ด้วย
+    if (fileData.analysis) {
+      setAiResult(fileData.analysis);
+    } else {
+      setAiResult(null);
+    }
+    setResultDate(fileData.analyzedAt ?? null);
     setShowResultModal(true);
     setIsHistoryDropdownOpen(false);
   };
@@ -307,6 +470,9 @@ export default function PortfolioStorage() {
     setSelectedFiles([]);
     setPreviewUrls([]);
     setSelectedExistingIds([]);
+    setResultDate(null);
+    setNotice(null);
+    setAiResult(null);
     setAdditionalSkillsText('');
     setUploadStatus('idle');
     setShowResultModal(false);
@@ -318,7 +484,7 @@ export default function PortfolioStorage() {
       <input type="file" multiple ref={fileInputRef} onChange={handleLocalFileSelect} accept=".pdf,.jpg,.jpeg,.png" className="hidden" />
       <input type="file" multiple ref={galleryFileInputRef} onChange={handleGalleryDirectSelect} accept=".pdf,.jpg,.jpeg,.png" className="hidden" />
 
-      <ResultModal isOpen={showResultModal} onClose={() => setShowResultModal(false)} files={selectedFiles} />
+      <ResultModal isOpen={showResultModal} onClose={() => setShowResultModal(false)} files={selectedFiles} analysis={aiResult} analyzedAt={resultDate} notice={notice} />
 
       {/* MODAL เลือกไฟล์จากคลาวด์ */}
       {isMediaModalOpen && (
@@ -406,7 +572,7 @@ export default function PortfolioStorage() {
                     <h4 className="font-extrabold text-slate-800 text-sm">ประวัติการวิเคราะห์ (ล่าสุด)</h4>
                   </div>
                   <div className="max-h-72 overflow-y-auto custom-scrollbar">
-                    {PORTFOLIO_FILES.map((file) => (
+                    {(myHistory.length > 0 ? myHistory : PORTFOLIO_FILES).map((file) => (
                       <div key={file.id} onClick={() => openHistoryModal(file)} className="px-4 py-3.5 border-b border-slate-50 hover:bg-blue-50/50 cursor-pointer transition-colors flex flex-col gap-1.5 group">
                         <div className="flex justify-between items-start gap-2">
                           <p className="text-sm font-bold text-slate-800 truncate group-hover:text-blue-700 transition-colors">{file.title}</p>
@@ -418,6 +584,9 @@ export default function PortfolioStorage() {
                         </div>
                       </div>
                     ))}
+                    {myHistory.length === 0 && (
+                      <p className="px-4 py-3 text-[11px] font-medium text-slate-400 text-center">ยังไม่มีประวัติจริง — โชว์ตัวอย่าง วิเคราะห์ไฟล์เพื่อสร้างประวัติของตัวเอง</p>
+                    )}
                   </div>
                 </div>
               )}

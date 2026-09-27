@@ -46,6 +46,47 @@ export interface MyPortfolioRow {
   created_at: string;
 }
 
+export interface MyAnalysisRow {
+  id: string;
+  portfolio_id: string;
+  portfolio_title: string;
+  skills: string[];
+  career: string | null;
+  accuracy: number;
+  technical: number;
+  soft: number;
+  management: number;
+  recommendations: { title: string; detail: string }[];
+  analyzed_at: string;
+  raw_input: string | null;
+  warnings: string[];
+}
+
+export async function listMyAnalyses(userId: string): Promise<MyAnalysisRow[]> {
+  const { data, error } = await supabase
+    .from('analysis_results')
+    .select('id,portfolio_id,skills,career,accuracy,technical,soft,management,recommendations,analyzed_at,raw_input,warnings,portfolios(title)')
+    .eq('user_id', userId)
+    .order('analyzed_at', { ascending: false })
+    .limit(20);
+  if (error) throw error;
+  return ((data ?? []) as unknown as (Omit<MyAnalysisRow, 'portfolio_title'> & { portfolios: { title: string } | null })[]).map((r) => ({
+    id: r.id,
+    portfolio_id: r.portfolio_id,
+    portfolio_title: r.portfolios?.title ?? 'ไม่ทราบชื่อไฟล์',
+    skills: r.skills ?? [],
+    career: r.career ?? null,
+    accuracy: r.accuracy ?? 85,
+    technical: r.technical ?? 90,
+    soft: r.soft ?? 65,
+    management: r.management ?? 50,
+    recommendations: (r.recommendations ?? []) as { title: string; detail: string }[],
+    analyzed_at: r.analyzed_at,
+    raw_input: (r as { raw_input?: string | null }).raw_input ?? null,
+    warnings: (r as { warnings?: string[] }).warnings ?? [],
+  }));
+}
+
 export async function listMyPortfolios(userId: string): Promise<MyPortfolioRow[]> {
   const { data, error } = await supabase
     .from('portfolios')

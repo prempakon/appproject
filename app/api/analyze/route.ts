@@ -21,18 +21,6 @@ interface AIResult {
   textWarning: string | null;
 }
 
-const FALLBACK: AIResult = {
-  skills: ['Python', 'SQL'],
-  career: null,
-  accuracy: 85,
-  technical: 90,
-  soft: 65,
-  management: 50,
-  recommendations: [],
-  warnings: [],
-  textWarning: null,
-};
-
 const SYSTEM_PROMPT = `You are a skill-analysis engine for a Thai university (Loei Rajabhat University) student portfolio system.
 Attached files (in listed order) are portfolio files: certificates, transcripts, project screenshots, posters, reports — images or PDFs — plus the student's own text about extra skills and the career they want.
 
@@ -73,10 +61,7 @@ Respond with ONLY valid JSON (no markdown, no code fences) in this exact schema:
 export async function POST(req: NextRequest) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return NextResponse.json(
-      { ...FALLBACK, _mock: true, _reason: 'missing GEMINI_API_KEY' },
-      { status: 200 },
-    );
+    return NextResponse.json({ error: 'missing GEMINI_API_KEY' }, { status: 500 });
   }
 
   let form: FormData;
@@ -160,13 +145,16 @@ export async function POST(req: NextRequest) {
     }), 'analyze');
     const text = (res.text ?? '').trim();
     const parsed = parseJson(text) as Partial<AIResult>;
+    if (!Array.isArray(parsed.skills)) {
+      throw new Error('model returned no skills array');
+    }
     const result: AIResult = {
-      skills: Array.isArray(parsed.skills) ? parsed.skills.map(String).slice(0, 12) : FALLBACK.skills,
+      skills: parsed.skills.map(String).slice(0, 12),
       career: typeof parsed.career === 'string' ? parsed.career : null,
-      accuracy: clampNum(parsed.accuracy, FALLBACK.accuracy),
-      technical: clampNum(parsed.technical, FALLBACK.technical),
-      soft: clampNum(parsed.soft, FALLBACK.soft),
-      management: clampNum(parsed.management, FALLBACK.management),
+      accuracy: clampNum(parsed.accuracy, 0),
+      technical: clampNum(parsed.technical, 0),
+      soft: clampNum(parsed.soft, 0),
+      management: clampNum(parsed.management, 0),
       recommendations: Array.isArray(parsed.recommendations)
         ? parsed.recommendations.slice(0, 4).map((r) => ({
             title: String((r as AIRecommendation)?.title ?? ''),
@@ -180,9 +168,13 @@ export async function POST(req: NextRequest) {
     };
     return NextResponse.json(result);
   } catch (err) {
-    const msg = err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200);
+    const msg = err instanceof Error ? err.message.slice(0, 300) : String(err).slice(0, 300);
     console.error('Gemini analyze failed:', err);
-    return NextResponse.json({ ...FALLBACK, _mock: true, _reason: msg }, { status: 200 });
+    const quota = /429|quota/i.test(msg);
+    return NextResponse.json(
+      { error: quota ? 'AI quota เต็มชั่วคราว (429) รอ 1-2 นาทีแล้วลองใหม่' : 'AI วิเคราะห์ไม่สำเร็จ ลองใหม่อีกครั้ง', detail: msg },
+      { status: quota ? 429 : 500 },
+    );
   }
 }
 

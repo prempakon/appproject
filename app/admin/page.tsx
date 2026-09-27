@@ -3,8 +3,16 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
+type RealFile = {
+  title: string;
+  file_url: string;
+  file_type: string;
+  created_at: string;
+};
+
 type StudentRow = {
   id: string;
+  userId: string;
   name: string;
   email: string;
   institution: string;
@@ -14,38 +22,8 @@ type StudentRow = {
   files: number;
   skills: string[];
   status: 'analyzed' | 'pending';
+  realFiles: RealFile[];
 };
-
-const STUDENTS: StudentRow[] = [
-  { id: 'STU-1001', name: 'Maria Santos', email: 'maria.santos@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'วิทยาการคอมพิวเตอร์', latestUpload: 'ส.ค. 28, 2026', career: 'Software Engineer', files: 6, skills: ['Python', 'SQL', 'Git', 'React'], status: 'analyzed' },
-  { id: 'STU-1002', name: "James O'Brien", email: 'james.obrien@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'วิทยาการข้อมูล', latestUpload: 'ส.ค. 25, 2026', career: 'Data Scientist', files: 4, skills: ['Python', 'Pandas', 'Machine Learning'], status: 'analyzed' },
-  { id: 'STU-1003', name: 'Aiko Tanaka', email: 'aiko.tanaka@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'เทคโนโลยีมัลติมีเดีย', latestUpload: 'ส.ค. 22, 2026', career: 'UX Designer', files: 9, skills: ['Figma', 'User Research', 'Prototyping'], status: 'analyzed' },
-  { id: 'STU-1004', name: 'Carlos Rivera', email: 'carlos.rivera@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'ความมั่นคงปลอดภัยไซเบอร์', latestUpload: 'ส.ค. 20, 2026', career: 'Cybersecurity Analyst', files: 3, skills: ['Linux', 'Networking', 'SIEM'], status: 'pending' },
-  { id: 'STU-1005', name: 'Emily Chen', email: 'emily.chen@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'วิศวกรรมซอฟต์แวร์', latestUpload: 'ก.ย. 01, 2026', career: 'Software Engineer', files: 7, skills: ['TypeScript', 'Next.js', 'Docker'], status: 'analyzed' },
-  { id: 'STU-1006', name: 'David Okonkwo', email: 'david.okonkwo@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'วิทยาการข้อมูล', latestUpload: 'ส.ค. 18, 2026', career: 'Data Scientist', files: 5, skills: ['R', 'Statistics', 'Power BI'], status: 'pending' },
-  { id: 'STU-1007', name: 'Sarah Mitchell', email: 'sarah.mitchell@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'การตลาดดิจิทัล', latestUpload: 'ส.ค. 15, 2026', career: 'Marketing Strategist', files: 2, skills: ['SEO', 'Content', 'Analytics'], status: 'analyzed' },
-  { id: 'STU-1008', name: 'Nattapong Srisai', email: 'nattapong.s@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'การบัญชี', latestUpload: 'ส.ค. 12, 2026', career: 'Finance Analyst', files: 4, skills: ['Excel', 'Accounting', 'Power BI'], status: 'analyzed' },
-  { id: 'STU-1009', name: 'Praewa Chaiyaphum', email: 'praewa.c@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'เทคโนโลยีมัลติมีเดีย', latestUpload: 'ส.ค. 09, 2026', career: 'UX Designer', files: 8, skills: ['Figma', 'Motion', 'Design System'], status: 'analyzed' },
-  { id: 'STU-1010', name: 'Kittipong Meesuk', email: 'kittipong.m@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'วิศวกรรมซอฟต์แวร์', latestUpload: 'ส.ค. 05, 2026', career: 'Software Engineer', files: 3, skills: ['Java', 'Spring', 'MySQL'], status: 'pending' },
-  { id: 'STU-1011', name: 'Wanida Phonsri', email: 'wanida.p@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'การตลาดดิจิทัล', latestUpload: 'ส.ค. 02, 2026', career: 'Marketing Strategist', files: 5, skills: ['Ads', 'Copywriting', 'CRM'], status: 'analyzed' },
-  { id: 'STU-1012', name: 'Somchai Wongdee', email: 'somchai.w@lru.ac.th', institution: 'มหาวิทยาลัยราชภัฏเลย', major: 'ความมั่นคงปลอดภัยไซเบอร์', latestUpload: 'ก.ค. 30, 2026', career: 'Cybersecurity Analyst', files: 6, skills: ['Pentest', 'Python', 'Forensics'], status: 'analyzed' },
-];
-
-type PortfolioFile = {
-  name: string;
-  kind: string;
-  hue: number;
-};
-
-const FILE_KINDS = ['UI Design', 'Certificate', 'Project Screenshot', 'Poster', 'Report', 'Prototype', 'Award', 'Mockup', 'Diagram'];
-
-function portfolioOf(row: StudentRow): PortfolioFile[] {
-  return Array.from({ length: row.files }, (_, index) => ({
-    name: `${row.id.toLowerCase()}-portfolio-${String(index + 1).padStart(2, '0')}.png`,
-    kind: FILE_KINDS[index % FILE_KINDS.length],
-    hue: (index * 47 + row.id.charCodeAt(row.id.length - 1) * 13) % 360,
-  }));
-}
 
 const CAREER_ORDER = ['Software Engineer', 'Data Scientist', 'UX Designer', 'Cybersecurity Analyst', 'Marketing Strategist', 'Finance Analyst'];
 
@@ -60,42 +38,44 @@ export default function AdminDashboard() {
     if (role !== 'admin') {
       router.push('/');
     }
-    // ทางจริง: ลองดึง profiles จาก DB มาทับ mock (พัง/ว่างก็ใช้ STUDENTS เดิม)
+    // ดึงข้อมูลจริงจาก DB (ไม่มี mock — ว่างก็โชว์ว่าง)
     (async () => {
       try {
         const { listProfilesForAdmin } = await import('../../lib/profiles');
-        const { profiles, portfolios } = await listProfilesForAdmin();
-        if (profiles.length === 0) return;
+        const { profiles, portfolios, analyses } = await listProfilesForAdmin();
         const mapped: StudentRow[] = profiles.map((p) => {
           const files = portfolios.filter((f) => f.user_id === p.id);
+          const latest = analyses.find((a) => a.user_id === p.id) ?? null;
           return {
             id: `DB-${p.id.slice(0, 8).toUpperCase()}`,
+            userId: p.id,
             name: p.name,
             email: p.email,
             institution: p.institution,
             major: p.major,
             latestUpload: files.length > 0 ? new Date(files[0].created_at).toLocaleDateString('th-TH') : '-',
-            career: '-',
+            career: latest?.career ?? '-',
             files: files.length,
-            skills: [],
-            status: files.length > 0 ? 'analyzed' : 'pending',
+            skills: latest?.skills ?? [],
+            status: latest ? 'analyzed' : 'pending',
+            realFiles: files.map((f) => ({ title: f.title, file_url: f.file_url, file_type: f.file_type, created_at: f.created_at })),
           };
         });
         setRows(mapped);
       } catch {
-        // เงียบไว้ ใช้ mock เดิม (เช่น ยังไม่รัน fix_rls_admin.sql)
+        setLoadError('ดึงข้อมูลแอดมินไม่สำเร็จ (อาจยังไม่รัน fix_rls_admin.sql หรือไม่มีสิทธิ์)');
       }
     })();
   }, [router]);
 
-  const [rows, setRows] = useState<StudentRow[]>(STUDENTS);
+  const [rows, setRows] = useState<StudentRow[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [careerFilter, setCareerFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'analyzed' | 'pending'>('all');
   const [page, setPage] = useState(1);
   const [viewing, setViewing] = useState<StudentRow | null>(null);
   const [deleting, setDeleting] = useState<StudentRow | null>(null);
-  const [preview, setPreview] = useState<PortfolioFile | null>(null);
 
   const filtered = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -134,8 +114,15 @@ export default function AdminDashboard() {
     setPage(1);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!deleting) return;
+    try {
+      const { deleteProfileForAdmin } = await import('../../lib/profiles');
+      await deleteProfileForAdmin(deleting.userId);
+    } catch {
+      // ลบใน DB ไม่สำเร็จก็เอาออกจากจอพร้อมแจ้งผ่าน loadError
+      setLoadError('ลบในฐานข้อมูลไม่สำเร็จ แต่เอาออกจากรายการจอแล้ว');
+    }
     setRows((prev) => prev.filter((row) => row.id !== deleting.id));
     setDeleting(null);
   };
@@ -157,6 +144,9 @@ export default function AdminDashboard() {
       </header>
 
       <div className="max-w-[1400px] mx-auto px-4 md:px-8 py-8 space-y-10">
+        {loadError && (
+          <p className="text-xs font-bold text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-3">⚠ {loadError}</p>
+        )}
         {/* ================= STATISTICS ================= */}
         <section className="space-y-4">
           <h2 className="text-xl font-extrabold text-slate-800">สถิติและข้อมูลเชิงลึกของระบบ</h2>
@@ -336,53 +326,42 @@ export default function AdminDashboard() {
               <DetailRow label="อัปโหลดล่าสุด" value={`${viewing.latestUpload} · ${viewing.files} ไฟล์`} />
               <div>
                 <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wide mb-2">ทักษะที่ตรวจพบ</p>
-                <div className="flex flex-wrap gap-2">
-                  {viewing.skills.map((skill) => (
-                    <span key={skill} className="text-xs font-bold text-blue-700 bg-blue-50 px-3 py-1 rounded-full">{skill}</span>
-                  ))}
-                </div>
+                {viewing.skills.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {viewing.skills.map((skill) => (
+                      <span key={skill} className="text-xs font-bold text-blue-700 bg-blue-50 px-3 py-1 rounded-full">{skill}</span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs font-medium text-slate-400">ยังไม่มีผลวิเคราะห์ทักษะ</p>
+                )}
               </div>
               <div>
-                <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wide mb-2">ผลงานที่ AI วิเคราะห์ ({viewing.files} ไฟล์)</p>
-                <div className="grid grid-cols-3 gap-3 max-h-60 overflow-y-auto pr-1">
-                  {portfolioOf(viewing).map((file) => (
-                    <button
-                      key={file.name}
-                      onClick={() => setPreview(file)}
-                      className="group text-left rounded-xl overflow-hidden border border-slate-100 hover:border-blue-300 hover:shadow-md transition-all"
-                    >
-                      <PortfolioThumb file={file} className="h-20" />
-                      <p className="text-[10px] font-bold text-slate-500 px-2 py-1.5 truncate group-hover:text-blue-600">{file.kind}</p>
-                    </button>
-                  ))}
-                </div>
+                <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wide mb-2">ผลงานที่อัปโหลด ({viewing.files} ไฟล์)</p>
+                {viewing.realFiles.length > 0 ? (
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    {viewing.realFiles.map((file) => (
+                      <a
+                        key={file.file_url}
+                        href={file.file_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 hover:border-blue-300 px-3 py-2 transition-all"
+                      >
+                        <span className="text-xs font-bold text-slate-700 truncate">{file.title}</span>
+                        <span className="text-[10px] font-extrabold text-slate-400 flex-shrink-0">{file.file_type}</span>
+                      </a>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs font-medium text-slate-400">ยังไม่มีไฟล์</p>
+                )}
               </div>
             </div>
 
             <div className="px-6 py-4 border-t border-slate-100 flex justify-end">
               <button onClick={() => setViewing(null)} className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-full font-bold text-sm transition-colors">ปิด</button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ================= IMAGE PREVIEW ================= */}
-      {preview && (
-        <div
-          onClick={() => setPreview(null)}
-          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm"
-        >
-          <div onClick={(event) => event.stopPropagation()} className="bg-white w-full max-w-xl rounded-[2rem] shadow-2xl overflow-hidden">
-            <div className="flex items-start justify-between gap-4 px-6 py-4 border-b border-slate-100">
-              <div className="min-w-0">
-                <h3 className="text-base font-extrabold text-slate-800 truncate">{preview.kind}</h3>
-                <p className="text-xs font-medium text-slate-400 truncate">{preview.name}</p>
-              </div>
-              <button onClick={() => setPreview(null)} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-            <PortfolioThumb file={preview} className="h-72" large />
           </div>
         </div>
       )}
@@ -431,20 +410,6 @@ function StatCard({ label, value, hint, tone }: { label: string; value: string; 
         <p className="text-2xl font-extrabold text-slate-800 truncate">{value}</p>
         <p className="text-[11px] font-medium text-slate-400 truncate">{hint}</p>
       </div>
-    </div>
-  );
-}
-
-function PortfolioThumb({ file, className, large }: { file: PortfolioFile; className: string; large?: boolean }) {
-  return (
-    <div
-      className={`w-full flex flex-col items-center justify-center gap-1 ${className}`}
-      style={{ background: `linear-gradient(135deg, hsl(${file.hue} 85% 92%), hsl(${(file.hue + 40) % 360} 85% 80%))` }}
-    >
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke={`hsl(${file.hue} 60% 35%)`} className={large ? 'w-14 h-14' : 'w-7 h-7'}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M18 9h.008v.008H18V9zm2.25 9.75H3.75A2.25 2.25 0 011.5 16.5V7.5a2.25 2.25 0 012.25-2.25h16.5A2.25 2.25 0 0122.5 7.5v9a2.25 2.25 0 01-2.25 2.25z" />
-      </svg>
-      {large && <p className="text-sm font-extrabold" style={{ color: `hsl(${file.hue} 60% 30%)` }}>{file.kind}</p>}
     </div>
   );
 }

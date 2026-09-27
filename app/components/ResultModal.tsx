@@ -5,7 +5,6 @@ interface ResultModalProps {
   onClose: () => void;
   files: File[];
   analyzedAt?: string | null;
-  notice?: string | null;
   analysis?: {
     skills: string[];
     career: string | null;
@@ -20,20 +19,30 @@ interface ResultModalProps {
   } | null;
 }
 
-const MOCK_SKILLS = ['Python', 'Data Analysis', 'Machine Learning', 'SQL', 'UX Design', 'Project Management', 'Communication', 'Leadership'];
-
-export default function ResultModal({ isOpen, onClose, files, analyzedAt, notice, analysis }: ResultModalProps) {
+export default function ResultModal({ isOpen, onClose, files, analyzedAt, analysis }: ResultModalProps) {
   if (!isOpen) return null;
 
   const analyzedLabel = analyzedAt ?? new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' });
 
-  const skills = analysis ? analysis.skills : MOCK_SKILLS;
-  const accuracy = analysis?.accuracy ?? 85;
-  const technical = analysis?.technical ?? 90;
-  const soft = analysis?.soft ?? 65;
-  const management = analysis?.management ?? 50;
-  const career = analysis?.career ?? 'วิศวกรซอฟต์แวร์ (ระดับสูง)';
-  const recommendations = analysis && analysis.recommendations.length > 0 ? analysis.recommendations : null;
+  if (!analysis) {
+    return (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl p-8 text-center">
+          <p className="text-base font-extrabold text-slate-800">โหลดผลวิเคราะห์ไม่สำเร็จ</p>
+          <p className="text-xs font-medium text-slate-500 mt-2">ไม่มีผลวิเคราะห์สำหรับไฟล์นี้ ลองวิเคราะห์ใหม่อีกครั้ง</p>
+          <button onClick={onClose} className="mt-6 px-8 py-2.5 bg-slate-900 text-white rounded-full font-bold text-sm">ปิด</button>
+        </div>
+      </div>
+    );
+  }
+
+  const skills = analysis.skills;
+  const accuracy = analysis.accuracy;
+  const technical = analysis.technical;
+  const soft = analysis.soft;
+  const management = analysis.management;
+  const career = analysis.career ?? 'ยังระบุสายงานไม่ได้';
+  const recommendations = analysis.recommendations.length > 0 ? analysis.recommendations : null;
   const warnings = analysis?.warnings && analysis.warnings.length > 0 ? analysis.warnings : null;
   const rawInput = analysis?.rawInput?.trim() ? analysis.rawInput.trim() : null;
   const textWarning = analysis?.textWarning?.trim() ? analysis.textWarning.trim() : null;
@@ -80,9 +89,6 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, notice
 
         {/* ส่วนเนื้อหา Body */}
         <div className="p-6 md:p-8 overflow-y-auto flex-grow space-y-8 bg-white custom-scrollbar">
-          {notice && (
-            <p className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">⚠ {notice}</p>
-          )}
           
           {/* Card 1: สัดส่วนทักษะและความแม่นยำ */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -216,34 +222,7 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, notice
                   </div>
                 ))
               ) : (
-                <>
-              {/* Item 1 */}
-              <div className="flex gap-4">
-                <div className="mt-1 flex-shrink-0 w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-xs font-extrabold text-slate-800 mb-0.5">แนะนำคอร์สเรียน: Advanced Machine Learning & Deep Learning</p>
-                  <p className="text-[11px] text-slate-500">เพื่อพัฒนาทักษะ Machine Learning ของคุณให้อยู่ในเกณฑ์เชี่ยวชาญระดับสูงตรงตามที่สายงานต้องการ</p>
-                </div>
-              </div>
-
-              {/* Item 2 */}
-              <div className="flex gap-4">
-                <div className="mt-1 flex-shrink-0 w-8 h-8 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 00.495-7.467 5.99 5.99 0 00-1.925 3.546 5.974 5.974 0 01-2.133-1A3.75 3.75 0 0012 18z" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-xs font-extrabold text-slate-800 mb-0.5">พัฒนาพอร์ตฟอลิโอ: เข้าร่วมกิจกรรม Hackathon หรือ Project-based</p>
-                  <p className="text-[11px] text-slate-500">ช่วยเสริมทักษะการบริหารจัดการ (Management) และการทำงานจริงเป็นทีมซึ่งส่งผลดีต่อ Soft Skills</p>
-                </div>
-              </div>
-                </>
+                <p className="text-xs font-medium text-slate-500">AI ไม่ได้ให้คำแนะนำสำหรับไฟล์ชุดนี้</p>
               )}
             </div>
           </div>

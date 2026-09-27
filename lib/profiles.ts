@@ -24,7 +24,7 @@ export async function upsertMyProfile(userId: string, patch: Partial<Profile> & 
   return data as Profile;
 }
 
-// แอดมิน: ดึงโปรไฟล์ทั้งหมดพร้อมจำนวนพอร์ต (ต้องรัน supabase/fix_rls_admin.sql ก่อน ไม่งั้น RLS บล็อก)
+// แอดมิน: ดึงโปรไฟล์ทั้งหมดพร้อมไฟล์พอร์ต (ต้องรัน supabase/fix_rls_admin.sql ก่อน ไม่งั้น RLS บล็อก)
 export async function listProfilesForAdmin() {
   const { data: profiles, error } = await supabase
     .from('profiles')
@@ -33,9 +33,24 @@ export async function listProfilesForAdmin() {
   if (error) throw error;
   const { data: portfolios, error: pfErr } = await supabase
     .from('portfolios')
-    .select('id,user_id,title,file_type,created_at');
+    .select('id,user_id,title,file_url,file_type,created_at')
+    .order('created_at', { ascending: false });
   if (pfErr) throw pfErr;
-  return { profiles: (profiles ?? []) as Profile[], portfolios: portfolios ?? [] };
+  const { data: analyses, error: anErr } = await supabase
+    .from('analysis_results')
+    .select('user_id,skills,career,analyzed_at')
+    .order('analyzed_at', { ascending: false });
+  if (anErr) throw anErr;
+  return {
+    profiles: (profiles ?? []) as Profile[],
+    portfolios: (portfolios ?? []) as { id: string; user_id: string; title: string; file_url: string; file_type: string; created_at: string }[],
+    analyses: (analyses ?? []) as { user_id: string; skills: string[]; career: string | null; analyzed_at: string }[],
+  };
+}
+
+export async function deleteProfileForAdmin(userId: string) {
+  const { error } = await supabase.from('profiles').delete().eq('id', userId);
+  if (error) throw error;
 }
 
 export interface MyPortfolioRow {

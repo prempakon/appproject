@@ -4,20 +4,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import ResultModal from '../components/ResultModal'; 
 
-type UserProfile = {
-  name: string;
+type UserProfile = {  name: string;
   avatar: string;
   institution?: string;
   major?: string;
   bio?: string;
   githubLink?: string;
 };
-
-const PORTFOLIO_FILES = [
-  { id: 1, title: 'Certificate_AWS.jpg', date: 'Aug 15, 2024', analyzedAt: '15 ส.ค. 2567, 10:30 น.', skills: 'พบ 12 ทักษะ', imageUrl: 'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?q=80&w=800&auto=format&fit=crop', type: 'JPG' },
-  { id: 2, title: 'Transcript_2024.pdf', date: 'Jul 22, 2024', analyzedAt: '22 ก.ค. 2567, 14:45 น.', skills: 'พบ 8 ทักษะ', imageUrl: 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?q=80&w=800&auto=format&fit=crop', type: 'PDF' },
-  { id: 3, title: 'Diploma_CS.jpg', date: 'Jun 10, 2024', analyzedAt: '10 มิ.ย. 2567, 09:15 น.', skills: 'พบ 15 ทักษะ', imageUrl: 'https://images.unsplash.com/photo-1606326608606-aa0b62935f2b?q=80&w=800&auto=format&fit=crop', type: 'JPG' },
-];
 
 export default function PortfolioStorage() {
   const [isDragging, setIsDragging] = useState(false);
@@ -28,7 +21,7 @@ export default function PortfolioStorage() {
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [selectedExistingIds, setSelectedExistingIds] = useState<(string | null)[]>([]);
   const [resultDate, setResultDate] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [showResultModal, setShowResultModal] = useState(false);
   const [isHistoryDropdownOpen, setIsHistoryDropdownOpen] = useState(false);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
@@ -141,13 +134,14 @@ export default function PortfolioStorage() {
     setPreviewUrls(urls);
     setSelectedExistingIds(existingIds);
     setAdditionalSkillsText('');
+    setAnalysisError(null);
     setUploadStatus('preview');
   };
 
   const startAIProcessing = async () => {
     setUploadStatus('processing');
     setAiResult(null);
-    setNotice(null);
+    setAnalysisError(null);
     // 1) เรียก Gemini วิเคราะห์ (ไฟล์จริง + ข้อความอาชีพที่สนใจ)
     let ai: {
       skills: string[];
@@ -206,67 +200,67 @@ export default function PortfolioStorage() {
         form.append('files', await downscaleImage(f), f.name);
       }
       const res = await fetch('/api/analyze', { method: 'POST', body: form });
-      if (res.ok) {
-        const data = await res.json();
-        if ((data as { _mock?: boolean })._mock) {
-          const reason = String((data as { _reason?: string })._reason ?? '');
-          setNotice(/429|quota/i.test(reason)
-            ? 'โควต้า AI เต็มชั่วคราว (429) ผลนี้เป็นค่าตัวอย่าง — รอ 1-2 นาทีแล้ววิเคราะห์ใหม่'
-            : 'AI ขัดข้องชั่วคราว ผลนี้เป็นค่าตัวอย่าง — ลองวิเคราะห์ใหม่อีกครั้ง');
-        }
-        if (Array.isArray(data.skills)) {
-          ai = {
-            skills: data.skills,
-            career: data.career ?? null,
-            accuracy: data.accuracy ?? 85,
-            technical: data.technical ?? 90,
-            soft: data.soft ?? 65,
-            management: data.management ?? 50,
-            recommendations: Array.isArray(data.recommendations) ? data.recommendations : [],
-            warnings: Array.isArray(data.warnings) ? data.warnings : [],
-            rawInput: additionalSkillsText.trim() ? additionalSkillsText.trim() : null,
-            textWarning: typeof data.textWarning === 'string' ? data.textWarning : null,
-          };
-          setAiResult(ai);
-        }
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(errBody.error || `AI วิเคราะห์ไม่สำเร็จ (HTTP ${res.status})`);
       }
-    } catch {
-      // พังก็ใช้ mock + บันทึกค่าเริ่มต้นต่อได้
+      const data = await res.json();
+      if (!Array.isArray(data.skills)) {
+        throw new Error('AI ตอบกลับไม่ถูกต้อง ลองใหม่อีกครั้ง');
+      }
+      ai = {
+        skills: data.skills,
+        career: data.career ?? null,
+        accuracy: data.accuracy ?? 0,
+        technical: data.technical ?? 0,
+        soft: data.soft ?? 0,
+        management: data.management ?? 0,
+        recommendations: Array.isArray(data.recommendations) ? data.recommendations : [],
+        warnings: Array.isArray(data.warnings) ? data.warnings : [],
+        rawInput: additionalSkillsText.trim() ? additionalSkillsText.trim() : null,
+        textWarning: typeof data.textWarning === 'string' ? data.textWarning : null,
+      };
+      setAiResult(ai);
+    } catch (err) {
+      // AI ล้มเหลว: กลับไปหน้า preview พร้อมข้อความ error — ไม่โชว์ mock ไม่เซฟค่าปลอม
+      setUploadStatus('preview');
+      setAnalysisError(err instanceof Error ? err.message : 'AI วิเคราะห์ไม่สำเร็จ ลองใหม่อีกครั้ง');
+      return;
     }
-    // 2) ทางจริง: ไฟล์จากเครื่องอัปโหลดใหม่ / ไฟล์จากคลังใช้แถวเดิมแล้วบันทึกผลวิเคราะห์เพิ่ม
+    // 2) บันทึกผลจริงลง DB (ai เป็น null ไม่ได้แล้วเพราะ return ไปก่อนถ้า AI ล้มเหลว)
     try {
       const { getSessionUser } = await import('../../lib/auth');
       const { uploadPortfolioReal, saveAnalysisReal } = await import('../../lib/storage');
       const user = await getSessionUser();
-      if (user && selectedFiles.length > 0) {
+      if (user && selectedFiles.length > 0 && ai) {
         for (let idx = 0; idx < selectedFiles.length; idx++) {
           const f = selectedFiles[idx];
           const existingId = selectedExistingIds[idx] ?? null;
           try {
             if (existingId) {
               await saveAnalysisReal(user.id, existingId, {
-                skills: ai?.skills ?? (additionalSkillsText ? [additionalSkillsText] : ['Python', 'SQL']),
-                career: ai?.career ?? null,
-                accuracy: ai?.accuracy,
-                technical: ai?.technical,
-                soft: ai?.soft,
-                management: ai?.management,
-                recommendations: ai?.recommendations,
-                rawInput: ai?.rawInput ?? (additionalSkillsText.trim() ? additionalSkillsText.trim() : null),
-                warnings: ai?.warnings,
+                skills: ai.skills,
+                career: ai.career,
+                accuracy: ai.accuracy,
+                technical: ai.technical,
+                soft: ai.soft,
+                management: ai.management,
+                recommendations: ai.recommendations,
+                rawInput: ai.rawInput,
+                warnings: ai.warnings,
               });
             } else if (f.size > 0) {
               const row = await uploadPortfolioReal(user.id, f);
               await saveAnalysisReal(user.id, (row as { id: string }).id, {
-                skills: ai?.skills ?? (additionalSkillsText ? [additionalSkillsText] : ['Python', 'SQL']),
-                career: ai?.career ?? null,
-                accuracy: ai?.accuracy,
-                technical: ai?.technical,
-                soft: ai?.soft,
-                management: ai?.management,
-                recommendations: ai?.recommendations,
-                rawInput: ai?.rawInput ?? (additionalSkillsText.trim() ? additionalSkillsText.trim() : null),
-                warnings: ai?.warnings,
+                skills: ai.skills,
+                career: ai.career,
+                accuracy: ai.accuracy,
+                technical: ai.technical,
+                soft: ai.soft,
+                management: ai.management,
+                recommendations: ai.recommendations,
+                rawInput: ai.rawInput,
+                warnings: ai.warnings,
               });
             }
           } catch {
@@ -275,14 +269,12 @@ export default function PortfolioStorage() {
         }
       }
     } catch {
-      // เงียบไว้ ใช้ mock flow เดิม
+      // เซฟ DB พังก็ยังโชว์ผลจริงใน modal ได้
     }
-    setTimeout(() => {
-      setUploadStatus('success');
-      setResultDate(new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' }));
-      setShowResultModal(true);
-      refreshMyPortfolios();
-    }, 4000);
+    setUploadStatus('success');
+    setResultDate(new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' }));
+    setShowResultModal(true);
+    refreshMyPortfolios();
   };
 
   const openHistoryModal = (fileData: any) => {
@@ -471,7 +463,7 @@ export default function PortfolioStorage() {
     setPreviewUrls([]);
     setSelectedExistingIds([]);
     setResultDate(null);
-    setNotice(null);
+    setAnalysisError(null);
     setAiResult(null);
     setAdditionalSkillsText('');
     setUploadStatus('idle');
@@ -484,7 +476,7 @@ export default function PortfolioStorage() {
       <input type="file" multiple ref={fileInputRef} onChange={handleLocalFileSelect} accept=".pdf,.jpg,.jpeg,.png" className="hidden" />
       <input type="file" multiple ref={galleryFileInputRef} onChange={handleGalleryDirectSelect} accept=".pdf,.jpg,.jpeg,.png" className="hidden" />
 
-      <ResultModal isOpen={showResultModal} onClose={() => setShowResultModal(false)} files={selectedFiles} analysis={aiResult} analyzedAt={resultDate} notice={notice} />
+      <ResultModal isOpen={showResultModal} onClose={() => setShowResultModal(false)} files={selectedFiles} analysis={aiResult} analyzedAt={resultDate} />
 
       {/* MODAL เลือกไฟล์จากคลาวด์ */}
       {isMediaModalOpen && (
@@ -503,11 +495,10 @@ export default function PortfolioStorage() {
             </div>
 
             <div className="p-6 overflow-y-auto flex-grow bg-slate-50/50 relative">
+              {myPortfolios.length > 0 ? (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-20">
-                {[
-                  ...myPortfolios.map((p) => ({ id: `db-${p.id}`, title: p.title, type: p.file_type, imageUrl: p.file_url })),
-                  ...(myPortfolios.length > 0 ? [] : PORTFOLIO_FILES),
-                ].map((file) => {
+                {myPortfolios.map((p) => {
+                  const file = { id: `db-${p.id}`, title: p.title, type: p.file_type, imageUrl: p.file_url };
                   const isSelected = selectedModalFiles.some((f) => f.id === file.id);
                   return (
                     <div key={file.id} onClick={() => toggleGallerySelection(file)} className={`group cursor-pointer bg-white rounded-xl border-2 transition-all overflow-hidden relative ${isSelected ? 'border-blue-500 shadow-md ring-2 ring-blue-500/20' : 'border-slate-200 hover:border-blue-300'}`}>
@@ -528,6 +519,9 @@ export default function PortfolioStorage() {
                   );
                 })}
               </div>
+              ) : (
+                <p className="py-16 text-sm font-bold text-slate-400 text-center">ยังไม่มีไฟล์ในคลัง<br />เพิ่มรูปจากเครื่องก่อน แล้วค่อยกลับมาเลือกที่นี่</p>
+              )}
               {selectedModalFiles.length > 0 && (
                 <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur-md px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-6 animate-in slide-in-from-bottom-10 duration-300">
                   <span className="text-white font-medium text-sm whitespace-nowrap">เลือกแล้ว <span className="font-extrabold text-blue-400">{selectedModalFiles.length}</span> รายการ</span>
@@ -572,20 +566,21 @@ export default function PortfolioStorage() {
                     <h4 className="font-extrabold text-slate-800 text-sm">ประวัติการวิเคราะห์ (ล่าสุด)</h4>
                   </div>
                   <div className="max-h-72 overflow-y-auto custom-scrollbar">
-                    {(myHistory.length > 0 ? myHistory : PORTFOLIO_FILES).map((file) => (
-                      <div key={file.id} onClick={() => openHistoryModal(file)} className="px-4 py-3.5 border-b border-slate-50 hover:bg-blue-50/50 cursor-pointer transition-colors flex flex-col gap-1.5 group">
-                        <div className="flex justify-between items-start gap-2">
-                          <p className="text-sm font-bold text-slate-800 truncate group-hover:text-blue-700 transition-colors">{file.title}</p>
-                          <span className="text-[10px] font-bold text-blue-600 bg-blue-100 px-2 py-0.5 rounded flex-shrink-0">{file.skills}</span>
+                    {myHistory.length > 0 ? (
+                      myHistory.map((file) => (
+                        <div key={file.id} onClick={() => openHistoryModal(file)} className="px-4 py-3.5 border-b border-slate-50 hover:bg-blue-50/50 cursor-pointer transition-colors flex flex-col gap-1.5 group">
+                          <div className="flex justify-between items-start gap-2">
+                            <p className="text-sm font-bold text-slate-800 truncate group-hover:text-blue-700 transition-colors">{file.title}</p>
+                            <span className="text-[10px] font-bold text-blue-600 bg-blue-100 px-2 py-0.5 rounded flex-shrink-0">{file.skills}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-xs font-medium text-slate-400">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            {file.analyzedAt}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1.5 text-xs font-medium text-slate-400">
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                          {file.analyzedAt}
-                        </div>
-                      </div>
-                    ))}
-                    {myHistory.length === 0 && (
-                      <p className="px-4 py-3 text-[11px] font-medium text-slate-400 text-center">ยังไม่มีประวัติจริง — โชว์ตัวอย่าง วิเคราะห์ไฟล์เพื่อสร้างประวัติของตัวเอง</p>
+                      ))
+                    ) : (
+                      <p className="px-4 py-8 text-xs font-medium text-slate-400 text-center">ยังไม่มีประวัติการวิเคราะห์<br />วิเคราะห์ไฟล์เพื่อสร้างประวัติของตัวเอง</p>
                     )}
                   </div>
                 </div>
@@ -721,6 +716,9 @@ export default function PortfolioStorage() {
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
                   </button>
                 </div>
+                {analysisError && (
+                  <p className="mt-4 max-w-md text-center text-sm font-bold text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">⚠ {analysisError}</p>
+                )}
               </div>
             )}
 
@@ -759,7 +757,7 @@ export default function PortfolioStorage() {
                 {gallerySaving ? 'กำลังเพิ่มลงคลัง...' : '+ เพิ่มรูปจากเครื่องสู่คลัง'}
               </button>
               <Link href="/gallery" className="px-5 py-2.5 bg-white border border-slate-200 hover:border-blue-400 hover:text-blue-600 text-slate-700 rounded-full font-bold text-sm transition-all shadow-sm whitespace-nowrap">
-                ดูรูปทั้งหมด ({myPortfolios.length > 0 ? myPortfolios.length : PORTFOLIO_FILES.length}) →
+                ดูรูปทั้งหมด ({myPortfolios.length}) →
               </Link>
             </div>
           </div>
@@ -775,8 +773,8 @@ export default function PortfolioStorage() {
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-            {/* ไฟล์จริงจาก DB ขึ้นก่อน (คลิกเลือกหลายรูปได้ / ลากขึ้นไปใส่ช่องวิเคราะห์ได้) */}
-            {myPortfolios.slice(0, 6).map((file) => {
+            {myPortfolios.length > 0 ? (
+              myPortfolios.slice(0, 6).map((file) => {
               const card = { id: `db-${file.id}`, title: file.title, imageUrl: file.file_url, type: file.file_type };
               const selected = gallerySelected.some((f) => f.id === card.id);
               return (
@@ -797,30 +795,12 @@ export default function PortfolioStorage() {
                 </div>
               </div>
               );
-            })}
-            {/* mock เดิมเป็นตัวอย่างเมื่อยังไม่มีไฟล์จริง (คลิกเลือก/ลากได้เช่นกัน) */}
-            {myPortfolios.length === 0 && PORTFOLIO_FILES.map((file) => {
-              const card = { id: `mock-${file.id}`, title: file.title, imageUrl: file.imageUrl, type: file.type };
-              const selected = gallerySelected.some((f) => f.id === card.id);
-              return (
-              <div key={file.id} onClick={() => toggleGalleryCard(card)} title="คลิกเพื่อเลือกหลายรูป" className={`group bg-white rounded-3xl shadow-sm hover:shadow-xl border-2 transition-all duration-300 overflow-hidden flex flex-col flex-shrink-0 cursor-pointer relative ${selected ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-slate-100'}`}>
-                {selected && (
-                  <div className="absolute top-3 right-3 z-20 bg-blue-600 text-white p-1.5 rounded-full shadow-md">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" /></svg>
-                  </div>
-                )}
-                <div className="aspect-[4/3] bg-slate-100 relative overflow-hidden flex-shrink-0">
-                  <div className="absolute top-4 left-4 z-10 bg-white/95 backdrop-blur-sm px-4 py-2 rounded-lg text-xs font-extrabold text-slate-800 shadow-sm flex-shrink-0">{file.type}</div>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={file.imageUrl} alt={file.title} draggable={false} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out flex-shrink-0 pointer-events-none" />
-                </div>
-                <div className="p-6 md:p-8 flex flex-col flex-grow flex-shrink-0">
-                  <h3 className="font-extrabold text-slate-800 text-xl truncate flex-shrink-0" title={file.title}>{file.title}</h3>
-                  <p className="text-sm font-medium text-slate-500 mt-2 mb-6 flex-shrink-0">Uploaded on {file.date}</p>
-                </div>
+              })
+            ) : (
+              <div className="col-span-full bg-white rounded-3xl border border-dashed border-slate-300 p-10 text-center">
+                <p className="text-sm font-bold text-slate-500">ยังไม่มีไฟล์ในคลัง — กด “+ เพิ่มรูปจากเครื่องสู่คลัง” หรืออัปโหลดด้านบนเพื่อเริ่มต้น</p>
               </div>
-              );
-            })}
+            )}
           </div>
         </section>
 

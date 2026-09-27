@@ -4,15 +4,8 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 
 export default function GalleryPage() {
-  const mockFiles = [
-    { id: 'm1', title: 'Certificate_AWS.jpg', date: 'Aug 15, 2024', type: 'JPG', imageUrl: 'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?q=80&w=800&auto=format&fit=crop' },
-    { id: 'm2', title: 'Transcript_2024.pdf', date: 'Jul 22, 2024', type: 'PDF', imageUrl: 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?q=80&w=800&auto=format&fit=crop' },
-    { id: 'm3', title: 'Diploma_CS.jpg', date: 'Jun 10, 2024', type: 'JPG', imageUrl: 'https://images.unsplash.com/photo-1606326608606-aa0b62935f2b?q=80&w=800&auto=format&fit=crop' },
-    { id: 'm4', title: 'Resume_Updated.pdf', date: 'May 01, 2024', type: 'PDF', imageUrl: 'https://images.unsplash.com/photo-1512314889357-e157c22f938d?q=80&w=800&auto=format&fit=crop' },
-    { id: 'm5', title: 'ID_Card_Copy.png', date: 'Jan 15, 2024', type: 'PNG', imageUrl: 'https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=800&auto=format&fit=crop' },
-    { id: 'm6', title: 'Award_Hackathon.jpg', date: 'Nov 20, 2023', type: 'JPG', imageUrl: 'https://images.unsplash.com/photo-1531545514251-b159ce8bf590?q=80&w=800&auto=format&fit=crop' },
-  ];
   const [realFiles, setRealFiles] = useState<{ id: string; title: string; date: string; type: string; imageUrl: string }[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
@@ -29,13 +22,13 @@ export default function GalleryPage() {
           type: r.file_type,
           imageUrl: r.file_url,
         })));
-      } catch {
-        // เงียบไว้ ใช้ mock
+      } finally {
+        setLoading(false);
       }
     })();
   }, []);
 
-  const allFiles = realFiles.length > 0 ? realFiles : mockFiles;
+  const allFiles = realFiles;
 
   return (
     <main className="min-h-screen bg-[#f8f9fa] p-4 sm:p-8 lg:p-12 text-slate-800 font-sans">
@@ -72,6 +65,9 @@ export default function GalleryPage() {
         </div>
 
         {/* --- Grid แสดงผลการ์ดไฟล์ --- */}
+        {loading ? (
+          <p className="py-16 text-sm font-bold text-slate-400 text-center">กำลังโหลดไฟล์...</p>
+        ) : allFiles.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
           
           {allFiles.map((file) => (
@@ -106,10 +102,16 @@ export default function GalleryPage() {
                 <h3 className="font-extrabold text-slate-800 text-base truncate" title={file.title}>{file.title}</h3>
                 <p className="text-[11px] font-medium text-slate-400 mt-1">Uploaded on {file.date}</p>
               </div>
-              
+               
             </div>
           ))}
         </div>
+        ) : (
+          <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center">
+            <p className="text-sm font-bold text-slate-500">ยังไม่มีไฟล์ในคลัง</p>
+            <Link href="/main" className="inline-block mt-4 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-bold text-sm transition-all">ไปอัปโหลดไฟล์</Link>
+          </div>
+        )}
 
       </div>
     </main>

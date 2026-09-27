@@ -11,6 +11,16 @@ type RealFile = {
   created_at: string;
 };
 
+type LatestAnalysis = {
+  accuracy: number;
+  technical: number;
+  soft: number;
+  management: number;
+  recommendations: { title: string; detail: string }[];
+  warnings: string[];
+  analyzed_at: string;
+};
+
 type StudentRow = {
   id: string;
   userId: string;
@@ -24,6 +34,7 @@ type StudentRow = {
   skills: string[];
   status: 'analyzed' | 'pending';
   realFiles: RealFile[];
+  latestAnalysis: LatestAnalysis | null;
 };
 
 const CAREER_ORDER = ['Software Engineer', 'Data Scientist', 'UX Designer', 'Cybersecurity Analyst', 'Marketing Strategist', 'Finance Analyst'];
@@ -60,6 +71,17 @@ export default function AdminDashboard() {
             files: files.length,
             skills: latest?.skills ?? [],
             status: latest ? 'analyzed' : 'pending',
+            latestAnalysis: latest
+              ? {
+                  accuracy: latest.accuracy ?? 0,
+                  technical: latest.technical ?? 0,
+                  soft: latest.soft ?? 0,
+                  management: latest.management ?? 0,
+                  recommendations: latest.recommendations ?? [],
+                  warnings: latest.warnings ?? [],
+                  analyzed_at: latest.analyzed_at,
+                }
+              : null,
             realFiles: files.map((f) => ({ id: f.id, title: f.title, file_url: f.file_url, file_type: f.file_type, created_at: f.created_at })),
           };
         });
@@ -390,6 +412,58 @@ export default function AdminDashboard() {
                   </div>
                 ) : (
                   <p className="text-xs font-medium text-slate-400">ยังไม่มีผลวิเคราะห์ทักษะ</p>
+                )}
+              </div>
+              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <p className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wide">ผลการวิเคราะห์ล่าสุด</p>
+                  {viewing.latestAnalysis && (
+                    <span className="text-[10px] font-medium text-slate-400">
+                      {new Date(viewing.latestAnalysis.analyzed_at).toLocaleDateString('th-TH')}
+                    </span>
+                  )}
+                </div>
+                {viewing.latestAnalysis ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl font-extrabold text-slate-800">{viewing.latestAnalysis.accuracy}%</span>
+                      <span className="text-[11px] font-medium text-slate-400">ความแม่นยำ</span>
+                    </div>
+                    {[
+                      { label: 'Technical', value: viewing.latestAnalysis.technical, color: 'bg-blue-500' },
+                      { label: 'Soft Skills', value: viewing.latestAnalysis.soft, color: 'bg-purple-500' },
+                      { label: 'Management', value: viewing.latestAnalysis.management, color: 'bg-indigo-500' },
+                    ].map((bar) => (
+                      <div key={bar.label}>
+                        <div className="flex justify-between text-[11px] font-bold text-slate-600 mb-1">
+                          <span>{bar.label}</span>
+                          <span>{bar.value}%</span>
+                        </div>
+                        <div className="w-full bg-slate-200 rounded-full h-1.5">
+                          <div className={`${bar.color} h-1.5 rounded-full`} style={{ width: `${bar.value}%` }}></div>
+                        </div>
+                      </div>
+                    ))}
+                    {viewing.latestAnalysis.recommendations.length > 0 && (
+                      <div className="pt-1 space-y-2">
+                        {viewing.latestAnalysis.recommendations.map((rec, i) => (
+                          <div key={i}>
+                            <p className="text-xs font-extrabold text-slate-700">{rec.title}</p>
+                            <p className="text-[11px] text-slate-500">{rec.detail}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {viewing.latestAnalysis.warnings.length > 0 && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                        {viewing.latestAnalysis.warnings.map((w, i) => (
+                          <p key={i} className="text-[11px] font-bold text-amber-700">⚠ {w}</p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs font-medium text-slate-400">ยังไม่มีผลวิเคราะห์</p>
                 )}
               </div>
               <div>

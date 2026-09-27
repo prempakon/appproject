@@ -38,13 +38,26 @@ export async function listProfilesForAdmin() {
   if (pfErr) throw pfErr;
   const { data: analyses, error: anErr } = await supabase
     .from('analysis_results')
-    .select('portfolio_id,user_id,skills,career,analyzed_at')
+    .select('portfolio_id,user_id,skills,career,accuracy,technical,soft,management,recommendations,warnings,raw_input,analyzed_at')
     .order('analyzed_at', { ascending: false });
   if (anErr) throw anErr;
   return {
     profiles: (profiles ?? []) as Profile[],
     portfolios: (portfolios ?? []) as { id: string; user_id: string; title: string; file_url: string; file_type: string; created_at: string }[],
-    analyses: (analyses ?? []) as { portfolio_id: string; user_id: string; skills: string[]; career: string | null; analyzed_at: string }[],
+    analyses: (analyses ?? []) as {
+      portfolio_id: string;
+      user_id: string;
+      skills: string[];
+      career: string | null;
+      accuracy: number;
+      technical: number;
+      soft: number;
+      management: number;
+      recommendations: { title: string; detail: string }[];
+      warnings: string[];
+      raw_input: string | null;
+      analyzed_at: string;
+    }[],
   };
 }
 

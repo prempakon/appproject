@@ -391,22 +391,29 @@ export default function AdminDashboard() {
       {/* ================= VIEW MODAL ================= */}
       {viewing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-lg rounded-[2rem] shadow-2xl overflow-hidden">
-            <div className="flex items-start justify-between gap-4 px-6 py-5 border-b border-slate-100">
-              <div>
-                <h3 className="text-xl font-extrabold text-slate-800">{viewing.name}</h3>
-                <p className="text-xs font-medium text-slate-400">{viewing.id} · {viewing.email}</p>
+          <div className="bg-white w-full max-w-xl rounded-[2rem] shadow-[0_32px_80px_-24px_rgba(15,23,42,0.3)] overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="flex items-start justify-between gap-4 px-6 py-5 border-b border-slate-100 flex-shrink-0">
+              <div className="flex items-center gap-4 min-w-0">
+                <div className="w-12 h-12 rounded-full bg-blue-600 text-white font-black flex items-center justify-center flex-shrink-0">
+                  {viewing.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-xl font-extrabold tracking-tight text-slate-800 truncate">{viewing.name}</h3>
+                  <p className="text-xs font-medium text-slate-400 truncate">{viewing.id} · {viewing.email}</p>
+                </div>
               </div>
-              <button onClick={() => setViewing(null)} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors">
+              <button onClick={() => setViewing(null)} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors flex-shrink-0">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
 
-            <div className="px-6 py-5 space-y-4">
-              <DetailRow label="สถานศึกษา" value={viewing.institution} />
-              <DetailRow label="คณะ / สาขาวิชา" value={viewing.major} />
-              <DetailRow label="สายอาชีพที่ AI แนะนำ" value={viewing.careerTh} />
-              <DetailRow label="อัปโหลดล่าสุด" value={`${viewing.latestUpload} · ${viewing.files} ไฟล์`} />
+            <div className="px-6 py-5 space-y-5 overflow-y-auto flex-grow custom-scrollbar">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <DetailRow label="สถานศึกษา" value={viewing.institution} />
+                <DetailRow label="คณะ / สาขาวิชา" value={viewing.major} />
+                <DetailRow label="สายอาชีพที่ AI แนะนำ" value={viewing.careerTh} />
+                <DetailRow label="อัปโหลดล่าสุด" value={`${viewing.latestUpload} · ${viewing.files} ไฟล์`} />
+              </div>
               <div>
                 <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wide mb-2">ทักษะที่ตรวจพบ</p>
                 {viewing.skills.length > 0 ? (
@@ -515,7 +522,7 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3">
+            <div className="px-6 py-4 border-t border-slate-100 bg-white flex justify-end gap-3 flex-shrink-0">
               <button onClick={() => viewing && openEdit(viewing)} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-bold text-sm transition-colors">แก้ไขข้อมูล</button>
               <button onClick={() => setViewing(null)} className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full font-bold text-sm transition-colors">ปิด</button>
             </div>

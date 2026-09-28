@@ -64,6 +64,7 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
   const warnings = analysis?.warnings && analysis.warnings.length > 0 ? analysis.warnings : null;
   const rawInput = analysis?.rawInput?.trim() ? analysis.rawInput.trim() : null;
   const textWarning = analysis?.textWarning?.trim() ? analysis.textWarning.trim() : null;
+  const lowConfidence = accuracy < 30;
 
   const downloadPdf = async () => {
     if (!reportRef.current || downloading) return;
@@ -151,6 +152,11 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
 
         {/* ส่วนเนื้อหา Body */}
         <div className="p-6 md:p-8 overflow-y-auto flex-grow space-y-8 bg-white custom-scrollbar">
+          {lowConfidence && (
+            <p className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+              ⚠ AI ไม่มั่นใจผลนี้ (ความแม่นยำ {accuracy}%) — หลักฐานยังน้อยหรือคลุมเครือ อัปโหลดใบเซอร์ ทรานสคริปต์ หรืองานที่ชัดขึ้นแล้ววิเคราะห์ใหม่
+            </p>
+          )}
           
           {/* Card 1: สัดส่วนทักษะและความแม่นยำ */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

@@ -430,6 +430,11 @@ export default function AdminDashboard() {
                 </div>
                 {viewing.latestAnalysis ? (
                   <div className="space-y-3">
+                    {viewing.latestAnalysis.accuracy < 30 && (
+                      <p className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                        ⚠ AI ไม่มั่นใจผลนี้ (ความแม่นยำ {viewing.latestAnalysis.accuracy}%)
+                      </p>
+                    )}
                     <div className="flex items-center gap-3">
                       <span className="text-2xl font-extrabold text-slate-800">{viewing.latestAnalysis.accuracy}%</span>
                       <span className="text-[11px] font-medium text-slate-400">ความแม่นยำ</span>

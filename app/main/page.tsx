@@ -246,7 +246,8 @@ export default function PortfolioStorage() {
       }
       const res = await fetch('/api/analyze', { method: 'POST', body: form });
       if (!res.ok) {
-        const errBody = await res.json().catch(() => ({})) as { error?: string };
+        const errBody = await res.json().catch(() => ({})) as { error?: string; detail?: string };
+        if (errBody.detail) console.error('AI analyze detail:', errBody.detail);
         throw new Error(errBody.error || `AI วิเคราะห์ไม่สำเร็จ (HTTP ${res.status})`);
       }
       const data = await res.json();

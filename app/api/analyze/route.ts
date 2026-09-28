@@ -157,12 +157,15 @@ export async function POST(req: NextRequest) {
     let res;
     let usedModel = MODELS[0];
     let lastErr: unknown = null;
-    for (const model of MODELS) {
+    for (const [mi, model] of MODELS.entries()) {
       try {
         res = await callWithRetry(() => ai.models.generateContent({
           model,
           contents: [{ role: 'user', parts }],
-          config: { temperature: 0.2, thinkingConfig: { thinkingBudget: 4096 } },
+          // thinking ใช้เฉพาะตัวหลัก ตัวสำรองส่งแบบธรรมดา (บางรุ่นไม่รองรับพารามิเตอร์นี้)
+          config: mi === 0
+            ? { temperature: 0.2, thinkingConfig: { thinkingBudget: 4096 } }
+            : { temperature: 0.2 },
         }), `analyze:${model}`);
         usedModel = model;
         break;

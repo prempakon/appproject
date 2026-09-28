@@ -111,9 +111,8 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-3xl rounded-[2rem] shadow-[0_32px_80px_-24px_rgba(15,23,42,0.3)] overflow-hidden flex flex-col max-h-[95vh] animate-in zoom-in-95 duration-300">
+      <div ref={reportRef} className="bg-white w-full max-w-3xl rounded-[2rem] shadow-[0_32px_80px_-24px_rgba(15,23,42,0.3)] overflow-hidden flex flex-col max-h-[95vh] animate-in zoom-in-95 duration-300">
         
-        <div ref={reportRef} className="flex flex-col bg-white">
         {/* Header ของ Modal */}
         <div className="px-6 md:px-8 py-6 border-b border-slate-100 relative bg-white flex-shrink-0">
           <button
@@ -301,9 +300,8 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
           </div>
 
         </div>
-        </div>
 
-        {/* Footer ของ Modal */}
+        {/* Footer ของ Modal (ไม่รวมใน PDF) */}
         <div className="px-6 md:px-8 py-5 border-t border-slate-100 flex flex-col sm:flex-row justify-end items-stretch sm:items-center gap-3 bg-slate-50/80 flex-shrink-0">
           <button 
             onClick={onClose} 

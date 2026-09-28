@@ -39,7 +39,7 @@ Synthesize:
 - skills: 6-12 items, ordered by strength of evidence, names IN THAI (may append the English term in parentheses, e.g. "การเขียนโปรแกรม (Python)", "การวิเคราะห์ข้อมูล (Data Analysis)"). NEVER return only generic ["Python","SQL"] — extract what is actually in the files.
 - career: one of Software Engineer, Data Scientist, UX Designer, Cybersecurity Analyst, Marketing Strategist, Finance Analyst (nearest match; use the student's stated interest only if the evidence supports it at least partially).
 - Scores 0-100 consistent with evidence: strong matching evidence 75+, weak/mixed 40-70, almost none below 40. accuracy = your honest confidence.
-- recommendations: exactly 2 items in Thai, each naming the biggest gap between the evidence and the suggested career and a concrete way to fill it (course/activity).
+- recommendations: exactly 2 items in Thai, each MUST cite the specific file/fact it responds to (e.g. start the detail with "จาก[ชื่อไฟล์/สิ่งที่เห็น]..."), naming the biggest gap between the evidence and the suggested career and a concrete way to fill it (course/activity). Generic advice with no file reference is forbidden.
 - warnings: one Thai line per IRRELEVANT file as "ชื่อไฟล์: เหตุผล".
 - textWarning: one short Thai sentence if the student's extra text is gibberish/off-topic/empty of useful info (else null). Skills may only use extra text that is study/work/career related.
 

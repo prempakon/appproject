@@ -16,6 +16,7 @@ interface ResultModalProps {
     warnings?: string[];
     rawInput?: string | null;
     textWarning?: string | null;
+    skillNotes?: { technical: string | null; soft: string | null; management: string | null };
   } | null;
 }
 
@@ -143,7 +144,7 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
                   <div className="w-full bg-slate-200 rounded-full h-2">
                     <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${technical}%` }}></div>
                   </div>
-                  <p className="text-[10px] text-slate-400 mt-1">ความเชี่ยวชาญการเขียนโค้ดและระบบ</p>
+                  <p className="text-[10px] text-slate-400 mt-1">{analysis.skillNotes?.technical ?? 'ความเชี่ยวชาญการเขียนโค้ดและระบบ'}</p>
                 </div>
 
                 {/* Bar 2 */}
@@ -154,7 +155,7 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
                   <div className="w-full bg-slate-200 rounded-full h-2">
                     <div className="bg-purple-500 h-2 rounded-full" style={{ width: `${soft}%` }}></div>
                   </div>
-                  <p className="text-[10px] text-slate-400 mt-1">การสื่อสารและการทำงานร่วมกัน</p>
+                  <p className="text-[10px] text-slate-400 mt-1">{analysis.skillNotes?.soft ?? 'การสื่อสารและการทำงานร่วมกัน'}</p>
                 </div>
 
                 {/* Bar 3 */}
@@ -165,7 +166,7 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
                   <div className="w-full bg-slate-200 rounded-full h-2">
                     <div className="bg-indigo-500 h-2 rounded-full" style={{ width: `${management}%` }}></div>
                   </div>
-                  <p className="text-[10px] text-slate-400 mt-1">การส่งมอบงานและการวางแผน</p>
+                  <p className="text-[10px] text-slate-400 mt-1">{analysis.skillNotes?.management ?? 'การส่งมอบงานและการวางแผน'}</p>
                 </div>
               </div>
             </div>

@@ -20,6 +20,7 @@ interface AIResult {
   recommendations: AIRecommendation[];
   warnings: string[];
   textWarning: string | null;
+  skillNotes: { technical: string | null; soft: string | null; management: string | null };
   _model?: string;
 }
 
@@ -58,7 +59,12 @@ Respond with ONLY valid JSON (no markdown, no code fences) in this exact schema:
     { "title": "...", "detail": "..." }
   ],
   "warnings": ["ชื่อไฟล์: เหตุผล"],
-  "textWarning": "one short Thai sentence or null"
+  "textWarning": "one short Thai sentence or null",
+  "skillNotes": {
+    "technical": "1-2 ประโยคภาษาไทย อธิบายทักษะเฉพาะทางที่เห็นจากไฟล์ไหน",
+    "soft": "1-2 ประโยคภาษาไทย อธิบายทักษะทั่วไปที่เห็นจากไฟล์ไหน",
+    "management": "1-2 ประโยคภาษาไทย อธิบายทักษะบริหารที่เห็นจากไฟล์ไหน"
+  }
 }`;
 
 export async function POST(req: NextRequest) {
@@ -194,6 +200,11 @@ export async function POST(req: NextRequest) {
         ? parsed.warnings.map(String).slice(0, 6)
         : [],
       textWarning: typeof parsed.textWarning === 'string' && parsed.textWarning.trim() ? parsed.textWarning.trim().slice(0, 300) : null,
+      skillNotes: {
+        technical: noteOf((parsed.skillNotes as Record<string, unknown> | undefined)?.technical),
+        soft: noteOf((parsed.skillNotes as Record<string, unknown> | undefined)?.soft),
+        management: noteOf((parsed.skillNotes as Record<string, unknown> | undefined)?.management),
+      },
       _model: usedModel,
     };
     // ซื่อสัตย์: ความมั่นใจต่ำกว่า 30% ห้ามฟันธงอาชีพ
@@ -211,6 +222,10 @@ export async function POST(req: NextRequest) {
       { status: quota ? 429 : 500 },
     );
   }
+}
+
+function noteOf(v: unknown): string | null {
+  return typeof v === 'string' && v.trim() ? v.trim().slice(0, 300) : null;
 }
 
 function clampNum(v: unknown, fallback: number) {

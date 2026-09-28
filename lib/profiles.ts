@@ -100,12 +100,13 @@ export interface MyAnalysisRow {
   analyzed_at: string;
   raw_input: string | null;
   warnings: string[];
+  skill_notes: { technical: string | null; soft: string | null; management: string | null };
 }
 
 export async function listMyAnalyses(userId: string): Promise<MyAnalysisRow[]> {
   const { data, error } = await supabase
     .from('analysis_results')
-    .select('id,portfolio_id,skills,career,career_en,accuracy,technical,soft,management,recommendations,analyzed_at,raw_input,warnings,portfolios(title)')
+    .select('id,portfolio_id,skills,career,career_en,accuracy,technical,soft,management,recommendations,analyzed_at,raw_input,warnings,technical_note,soft_note,management_note,portfolios(title)')
     .eq('user_id', userId)
     .order('analyzed_at', { ascending: false })
     .limit(20);
@@ -125,6 +126,11 @@ export async function listMyAnalyses(userId: string): Promise<MyAnalysisRow[]> {
     analyzed_at: r.analyzed_at,
     raw_input: (r as { raw_input?: string | null }).raw_input ?? null,
     warnings: (r as { warnings?: string[] }).warnings ?? [],
+    skill_notes: {
+      technical: (r as { technical_note?: string | null }).technical_note ?? null,
+      soft: (r as { soft_note?: string | null }).soft_note ?? null,
+      management: (r as { management_note?: string | null }).management_note ?? null,
+    },
   }));
 }
 

@@ -45,6 +45,7 @@ export default function PortfolioStorage() {
     warnings: string[];
     rawInput: string | null;
     textWarning: string | null;
+    skillNotes: { technical: string | null; soft: string | null; management: string | null };
   } | null>(null);
   const [myPortfolios, setMyPortfolios] = useState<{ id: string; title: string; file_url: string; file_type: string; created_at: string }[]>([]);
   const [myHistory, setMyHistory] = useState<{
@@ -65,6 +66,7 @@ export default function PortfolioStorage() {
       warnings: string[];
       rawInput: string | null;
       textWarning: string | null;
+      skillNotes: { technical: string | null; soft: string | null; management: string | null };
     };
   }[]>([]);
 
@@ -94,6 +96,7 @@ export default function PortfolioStorage() {
           warnings: a.warnings ?? [],
           rawInput: a.raw_input ?? null,
           textWarning: null,
+          skillNotes: a.skill_notes ?? { technical: null, soft: null, management: null },
         },
       })));
     } catch {
@@ -158,6 +161,7 @@ export default function PortfolioStorage() {
       warnings: string[];
       rawInput: string | null;
       textWarning: string | null;
+      skillNotes: { technical: string | null; soft: string | null; management: string | null };
     } | null = null;
     // ย่อรูปก่อนส่งให้ AI (ประหยัดโควต้า token + เร็วขึ้น ไฟล์ต้นฉบับยังอัปโหลดเต็มขนาด)
     const downscaleImage = (file: File, maxSide = 1280): Promise<File> => {
@@ -224,6 +228,11 @@ export default function PortfolioStorage() {
         warnings: Array.isArray(data.warnings) ? data.warnings : [],
         rawInput: additionalSkillsText.trim() ? additionalSkillsText.trim() : null,
         textWarning: typeof data.textWarning === 'string' ? data.textWarning : null,
+        skillNotes: {
+          technical: typeof data.skillNotes?.technical === 'string' ? data.skillNotes.technical : null,
+          soft: typeof data.skillNotes?.soft === 'string' ? data.skillNotes.soft : null,
+          management: typeof data.skillNotes?.management === 'string' ? data.skillNotes.management : null,
+        },
       };
       setAiResult(ai);
     } catch (err) {
@@ -254,6 +263,7 @@ export default function PortfolioStorage() {
                 recommendations: ai.recommendations,
                 rawInput: ai.rawInput,
                 warnings: ai.warnings,
+                skillNotes: ai.skillNotes,
               });
             } else if (f.size > 0) {
               const row = await uploadPortfolioReal(user.id, f);
@@ -268,6 +278,7 @@ export default function PortfolioStorage() {
                 recommendations: ai.recommendations,
                 rawInput: ai.rawInput,
                 warnings: ai.warnings,
+                skillNotes: ai.skillNotes,
               });
             }
           } catch {

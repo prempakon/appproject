@@ -44,6 +44,7 @@ export async function saveAnalysisReal(userId: string, portfolioId: string, inpu
   recommendations?: { title: string; detail: string }[];
   rawInput?: string | null;
   warnings?: string[];
+  skillNotes?: { technical: string | null; soft: string | null; management: string | null };
 }) {
   const { data, error } = await supabase
     .from('analysis_results')
@@ -60,6 +61,9 @@ export async function saveAnalysisReal(userId: string, portfolioId: string, inpu
       recommendations: input.recommendations ?? [],
       raw_input: input.rawInput ?? null,
       warnings: input.warnings ?? [],
+      technical_note: input.skillNotes?.technical ?? null,
+      soft_note: input.skillNotes?.soft ?? null,
+      management_note: input.skillNotes?.management ?? null,
     })
     .select()
     .single();

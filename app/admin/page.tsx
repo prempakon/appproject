@@ -21,6 +21,13 @@ type LatestAnalysis = {
   analyzed_at: string;
 };
 
+type StudentHistory = {
+  portfolioTitle: string;
+  analyzedAt: string;
+  skills: string[];
+  career: string | null;
+};
+
 type StudentRow = {
   id: string;
   userId: string;
@@ -36,6 +43,7 @@ type StudentRow = {
   status: 'analyzed' | 'pending';
   realFiles: RealFile[];
   latestAnalysis: LatestAnalysis | null;
+  history: StudentHistory[];
 };
 
 const CAREER_ORDER = ['Software Engineer', 'Data Scientist', 'UX Designer', 'Cybersecurity Analyst', 'Marketing Strategist', 'Finance Analyst'];
@@ -76,7 +84,9 @@ export default function AdminDashboard() {
         setAnalyzedIds(analyses.map((a) => a.portfolio_id));
         const mapped: StudentRow[] = profiles.map((p) => {
           const files = portfolios.filter((f) => f.user_id === p.id);
-          const latest = analyses.find((a) => a.user_id === p.id) ?? null;
+          const userAnalyses = analyses.filter((a) => a.user_id === p.id);
+          const latest = userAnalyses[0] ?? null;
+          const titleOf = (pid: string) => portfolios.find((f) => f.id === pid)?.title ?? 'ไม่ทราบชื่อไฟล์';
           return {
             id: `DB-${p.id.slice(0, 8).toUpperCase()}`,
             userId: p.id,
@@ -102,6 +112,12 @@ export default function AdminDashboard() {
                 }
               : null,
             realFiles: files.map((f) => ({ id: f.id, title: f.title, file_url: f.file_url, file_type: f.file_type, created_at: f.created_at })),
+            history: userAnalyses.map((a) => ({
+              portfolioTitle: titleOf(a.portfolio_id),
+              analyzedAt: new Date(a.analyzed_at).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+              skills: a.skills ?? [],
+              career: a.career ?? null,
+            })),
           };
         });
         setRows(mapped);
@@ -543,6 +559,37 @@ export default function AdminDashboard() {
                   </div>
                 ) : (
                   <p className="text-xs font-medium text-slate-400">ยังไม่มีไฟล์</p>
+                )}
+              </div>
+              <div>
+                <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wide mb-2">
+                  ภาพและทักษะที่ AI วิเคราะห์แล้ว ({viewing.history.length} ครั้ง)
+                </p>
+                {viewing.history.length > 0 ? (
+                  <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                    {viewing.history.map((h) => (
+                      <div key={`${h.portfolioTitle}-${h.analyzedAt}`} className="rounded-xl border border-slate-100 bg-white px-3.5 py-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-extrabold text-slate-800 truncate">{h.portfolioTitle}</p>
+                          <span className="text-[10px] font-medium text-slate-400 flex-shrink-0">{h.analyzedAt}</span>
+                        </div>
+                        {h.career && (
+                          <p className="text-[11px] font-bold text-blue-700 mt-1">สายงาน: {h.career}</p>
+                        )}
+                        {h.skills.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {h.skills.map((skill) => (
+                              <span key={skill} className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">{skill}</span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-[11px] font-medium text-slate-400 mt-1">รอบนี้ไม่พบทักษะ</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs font-medium text-slate-400">ยังไม่มีประวัติการวิเคราะห์</p>
                 )}
               </div>
             </div>

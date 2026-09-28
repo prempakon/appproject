@@ -36,6 +36,7 @@ export async function uploadPortfolioReal(userId: string, file: File) {
 export async function saveAnalysisReal(userId: string, portfolioId: string, input: {
   skills: string[];
   career?: string | null;
+  careerEn?: string | null;
   accuracy?: number;
   technical?: number;
   soft?: number;
@@ -51,6 +52,7 @@ export async function saveAnalysisReal(userId: string, portfolioId: string, inpu
       portfolio_id: portfolioId,
       skills: input.skills,
       career: input.career ?? null,
+      career_en: input.careerEn ?? null,
       accuracy: input.accuracy ?? 85,
       technical: input.technical ?? 90,
       soft: input.soft ?? 65,

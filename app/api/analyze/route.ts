@@ -12,6 +12,7 @@ interface AIRecommendation {
 interface AIResult {
   skills: string[];
   career: string | null;
+  careerEn: string | null;
   accuracy: number;
   technical: number;
   soft: number;
@@ -37,7 +38,8 @@ RULE: IRRELEVANT files contribute ZERO skills. Every skill must trace to a CERTI
 
 Synthesize:
 - skills: 6-12 items, ordered by strength of evidence, names IN THAI (may append the English term in parentheses, e.g. "การเขียนโปรแกรม (Python)", "การวิเคราะห์ข้อมูล (Data Analysis)"). NEVER return only generic ["Python","SQL"] — extract what is actually in the files.
-- career: one of Software Engineer, Data Scientist, UX Designer, Cybersecurity Analyst, Marketing Strategist, Finance Analyst (nearest match; use the student's stated interest only if the evidence supports it at least partially).
+- career: FREE-FORM Thai text describing the best-fit career or study path based on the evidence AND the student's stated interest (e.g. "วิศวกรซอฟต์แวร์", "นักวิทยาศาสตร์ข้อมูล", "หมอ", "พยาบาล", "ครู"). Do NOT restrict to any list — respond like a chat AI reading the actual person. If evidence is weak, name the interest but keep scores honest.
+- careerEn: for curriculum statistics, the NEAREST of [Software Engineer, Data Scientist, UX Designer, Cybersecurity Analyst, Marketing Strategist, Finance Analyst], or null if none fits (e.g. doctor/nurse/teacher).
 - Scores 0-100 consistent with evidence: strong matching evidence 75+, weak/mixed 40-70, almost none below 40. accuracy = your honest confidence.
 - recommendations: exactly 2 items in Thai, each MUST cite the specific file/fact it responds to (e.g. start the detail with "จาก[ชื่อไฟล์/สิ่งที่เห็น]..."), naming the biggest gap between the evidence and the suggested career and a concrete way to fill it (course/activity). Generic advice with no file reference is forbidden.
 - warnings: one Thai line per IRRELEVANT file as "ชื่อไฟล์: เหตุผล".
@@ -45,9 +47,9 @@ Synthesize:
 
 Respond with ONLY valid JSON (no markdown, no code fences) in this exact schema:
 {
-  "skills": ["Skill1", "Skill2"],
-  "career": "...",
-  "accuracy": 0-100,
+  "skills": ["ทักษะภาษาไทย", ...],
+  "career": "อาชีพที่เหมาะที่สุด ภาษาไทย อิสระ",
+  "careerEn": "one of the 6 English names above or null",
   "technical": 0-100,
   "soft": 0-100,
   "management": 0-100,
@@ -170,9 +172,14 @@ export async function POST(req: NextRequest) {
     if (!Array.isArray(parsed.skills)) {
       throw new Error('model returned no skills array');
     }
+    const CAREER_EN = ['Software Engineer', 'Data Scientist', 'UX Designer', 'Cybersecurity Analyst', 'Marketing Strategist', 'Finance Analyst'];
+    const careerEn = typeof parsed.careerEn === 'string' && CAREER_EN.includes(parsed.careerEn.trim())
+      ? parsed.careerEn.trim()
+      : null;
     const result: AIResult = {
       skills: parsed.skills.map(String).slice(0, 12),
-      career: typeof parsed.career === 'string' ? parsed.career : null,
+      career: typeof parsed.career === 'string' && parsed.career.trim() ? parsed.career.trim().slice(0, 200) : null,
+      careerEn,
       accuracy: clampNum(parsed.accuracy, 0),
       technical: clampNum(parsed.technical, 0),
       soft: clampNum(parsed.soft, 0),

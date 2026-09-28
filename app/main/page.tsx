@@ -36,6 +36,7 @@ export default function PortfolioStorage() {
   const [aiResult, setAiResult] = useState<{
     skills: string[];
     career: string | null;
+    careerEn: string | null;
     accuracy: number;
     technical: number;
     soft: number;
@@ -55,6 +56,7 @@ export default function PortfolioStorage() {
     analysis: {
       skills: string[];
       career: string | null;
+      careerEn: string | null;
       accuracy: number;
       technical: number;
       soft: number;
@@ -83,6 +85,7 @@ export default function PortfolioStorage() {
         analysis: {
           skills: a.skills,
           career: a.career,
+          careerEn: a.career_en ?? null,
           accuracy: a.accuracy,
           technical: a.technical,
           soft: a.soft,
@@ -146,6 +149,7 @@ export default function PortfolioStorage() {
     let ai: {
       skills: string[];
       career: string | null;
+      careerEn: string | null;
       accuracy: number;
       technical: number;
       soft: number;
@@ -211,6 +215,7 @@ export default function PortfolioStorage() {
       ai = {
         skills: data.skills,
         career: data.career ?? null,
+        careerEn: typeof data.careerEn === 'string' ? data.careerEn : null,
         accuracy: data.accuracy ?? 0,
         technical: data.technical ?? 0,
         soft: data.soft ?? 0,
@@ -241,6 +246,7 @@ export default function PortfolioStorage() {
               await saveAnalysisReal(user.id, existingId, {
                 skills: ai.skills,
                 career: ai.career,
+                careerEn: ai.careerEn,
                 accuracy: ai.accuracy,
                 technical: ai.technical,
                 soft: ai.soft,
@@ -254,6 +260,7 @@ export default function PortfolioStorage() {
               await saveAnalysisReal(user.id, (row as { id: string }).id, {
                 skills: ai.skills,
                 career: ai.career,
+                careerEn: ai.careerEn,
                 accuracy: ai.accuracy,
                 technical: ai.technical,
                 soft: ai.soft,

@@ -30,6 +30,7 @@ type StudentRow = {
   major: string;
   latestUpload: string;
   career: string;
+  careerTh: string;
   files: number;
   skills: string[];
   status: 'analyzed' | 'pending';
@@ -67,7 +68,8 @@ export default function AdminDashboard() {
             institution: p.institution,
             major: p.major,
             latestUpload: files.length > 0 ? new Date(files[0].created_at).toLocaleDateString('th-TH') : '-',
-            career: latest?.career ?? '-',
+            career: latest?.career_en ?? '-',
+            careerTh: latest?.career ?? '-',
             files: files.length,
             skills: latest?.skills ?? [],
             status: latest ? 'analyzed' : 'pending',
@@ -162,8 +164,10 @@ export default function AdminDashboard() {
 
   const careerStats = useMemo(() => {
     const counts = CAREER_ORDER.map((career) => ({ career, count: rows.filter((row) => row.career === career).length }));
-    const max = Math.max(1, ...counts.map((c) => c.count));
-    return counts.map((c) => ({ ...c, percent: Math.round((c.count / max) * 100) }));
+    const others = rows.filter((row) => row.career !== '-' && !CAREER_ORDER.includes(row.career)).length;
+    const all = others > 0 ? [...counts, { career: 'อาชีพอื่นๆ', count: others }] : counts;
+    const max = Math.max(1, ...all.map((c) => c.count));
+    return all.map((c) => ({ ...c, percent: Math.round((c.count / max) * 100) }));
   }, [rows]);
 
   const topSkill = useMemo(() => {
@@ -322,7 +326,7 @@ export default function AdminDashboard() {
                         <p className="text-xs text-slate-400">{row.email}</p>
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-600">{row.latestUpload}</td>
-                      <td className="px-6 py-4 text-sm text-slate-600">{row.career}</td>
+                      <td className="px-6 py-4 text-sm text-slate-600">{row.careerTh}</td>
                       <td className="px-6 py-4">
                         <span className={`text-[11px] font-extrabold px-2.5 py-1 rounded-full ${row.status === 'analyzed' ? 'text-emerald-700 bg-emerald-50' : 'text-amber-700 bg-amber-50'}`}>
                           {row.status === 'analyzed' ? 'วิเคราะห์แล้ว' : 'รอวิเคราะห์'}
@@ -400,7 +404,7 @@ export default function AdminDashboard() {
             <div className="px-6 py-5 space-y-4">
               <DetailRow label="สถานศึกษา" value={viewing.institution} />
               <DetailRow label="คณะ / สาขาวิชา" value={viewing.major} />
-              <DetailRow label="สายอาชีพที่ AI แนะนำ" value={viewing.career} />
+              <DetailRow label="สายอาชีพที่ AI แนะนำ" value={viewing.careerTh} />
               <DetailRow label="อัปโหลดล่าสุด" value={`${viewing.latestUpload} · ${viewing.files} ไฟล์`} />
               <div>
                 <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wide mb-2">ทักษะที่ตรวจพบ</p>

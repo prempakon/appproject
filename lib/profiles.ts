@@ -38,7 +38,7 @@ export async function listProfilesForAdmin() {
   if (pfErr) throw pfErr;
   const { data: analyses, error: anErr } = await supabase
     .from('analysis_results')
-    .select('portfolio_id,user_id,skills,career,accuracy,technical,soft,management,recommendations,warnings,raw_input,analyzed_at')
+    .select('portfolio_id,user_id,skills,career,career_en,accuracy,technical,soft,management,recommendations,warnings,raw_input,analyzed_at')
     .order('analyzed_at', { ascending: false });
   if (anErr) throw anErr;
   return {
@@ -49,6 +49,7 @@ export async function listProfilesForAdmin() {
       user_id: string;
       skills: string[];
       career: string | null;
+      career_en: string | null;
       accuracy: number;
       technical: number;
       soft: number;
@@ -90,6 +91,7 @@ export interface MyAnalysisRow {
   portfolio_title: string;
   skills: string[];
   career: string | null;
+  career_en: string | null;
   accuracy: number;
   technical: number;
   soft: number;
@@ -103,7 +105,7 @@ export interface MyAnalysisRow {
 export async function listMyAnalyses(userId: string): Promise<MyAnalysisRow[]> {
   const { data, error } = await supabase
     .from('analysis_results')
-    .select('id,portfolio_id,skills,career,accuracy,technical,soft,management,recommendations,analyzed_at,raw_input,warnings,portfolios(title)')
+    .select('id,portfolio_id,skills,career,career_en,accuracy,technical,soft,management,recommendations,analyzed_at,raw_input,warnings,portfolios(title)')
     .eq('user_id', userId)
     .order('analyzed_at', { ascending: false })
     .limit(20);
@@ -114,6 +116,7 @@ export async function listMyAnalyses(userId: string): Promise<MyAnalysisRow[]> {
     portfolio_title: r.portfolios?.title ?? 'ไม่ทราบชื่อไฟล์',
     skills: r.skills ?? [],
     career: r.career ?? null,
+    career_en: (r as { career_en?: string | null }).career_en ?? null,
     accuracy: r.accuracy ?? 85,
     technical: r.technical ?? 90,
     soft: r.soft ?? 65,

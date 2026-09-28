@@ -50,7 +50,12 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
   const technical = analysis.technical;
   const soft = analysis.soft;
   const management = analysis.management;
-  const career = analysis.career ? (CAREER_TH[analysis.career] ?? analysis.career) : 'ยังระบุสายงานไม่ได้';
+  const career = (() => {
+    const raw = (analysis.career ?? '').trim();
+    if (!raw) return 'ยังระบุสายงานไม่ได้';
+    const hit = Object.keys(CAREER_TH).find((k) => k.toLowerCase() === raw.toLowerCase());
+    return hit ? CAREER_TH[hit] : raw;
+  })();
   const recommendations = analysis.recommendations.length > 0 ? analysis.recommendations : null;
   const warnings = analysis?.warnings && analysis.warnings.length > 0 ? analysis.warnings : null;
   const rawInput = analysis?.rawInput?.trim() ? analysis.rawInput.trim() : null;

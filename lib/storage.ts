@@ -5,6 +5,18 @@ function extOf(name: string, fallback = 'jpg') {
   return m ? m[1] : fallback;
 }
 
+// ชื่อไฟล์จาก AI (ChatGPT ฯลฯ) มักยาวหรือมีอักขระพิเศษจน Storage ปฏิเสธ — ล้างก่อนอัปโหลด
+function safeStorageName(name: string) {
+  const dot = name.lastIndexOf('.');
+  const base = (dot > 0 ? name.slice(0, dot) : name)
+    .normalize('NFKD')
+    .replace(/[^\w\-.]+/g, '_')
+    .replace(/_+/g, '_')
+    .slice(0, 80) || 'file';
+  const ext = dot > 0 ? name.slice(dot).toLowerCase().replace(/[^.a-z0-9]/g, '') || '.jpg' : '.jpg';
+  return `${base}${ext}`;
+}
+
 export async function uploadAvatarReal(userId: string, file: File) {
   const path = `${userId}/avatar.${extOf(file.name, 'jpg')}`;
   const { error } = await supabase.storage.from('avatars').upload(path, file, { upsert: true });
@@ -14,7 +26,7 @@ export async function uploadAvatarReal(userId: string, file: File) {
 }
 
 export async function uploadPortfolioReal(userId: string, file: File) {
-  const path = `${userId}/${Date.now()}-${file.name}`;
+  const path = `${userId}/${Date.now()}-${safeStorageName(file.name)}`;
   const { error } = await supabase.storage.from('portfolios').upload(path, file);
   if (error) throw error;
   const { data } = supabase.storage.from('portfolios').getPublicUrl(path);

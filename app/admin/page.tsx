@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import ResultModal from '../components/ResultModal';
 
 type RealFile = {
   id: string;
@@ -24,8 +25,16 @@ type LatestAnalysis = {
 type StudentHistory = {
   portfolioTitle: string;
   analyzedAt: string;
+  analyzedLabel: string;
   skills: string[];
   career: string | null;
+  accuracy: number;
+  technical: number;
+  soft: number;
+  management: number;
+  recommendations: { title: string; detail: string }[];
+  warnings: string[];
+  rawInput: string | null;
 };
 
 type StudentRow = {
@@ -61,6 +70,7 @@ export default function AdminDashboard() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'analyzed' | 'pending'>('all');
   const [page, setPage] = useState(1);
   const [viewing, setViewing] = useState<StudentRow | null>(null);
+  const [historyDetail, setHistoryDetail] = useState<StudentHistory | null>(null);
   const [fileFilter, setFileFilter] = useState<'all' | 'analyzed' | 'pending'>('all');
   const [deleting, setDeleting] = useState<StudentRow | null>(null);
   const [previewFile, setPreviewFile] = useState<RealFile | null>(null);
@@ -115,8 +125,16 @@ export default function AdminDashboard() {
             history: userAnalyses.map((a) => ({
               portfolioTitle: titleOf(a.portfolio_id),
               analyzedAt: new Date(a.analyzed_at).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+              analyzedLabel: new Date(a.analyzed_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' }),
               skills: a.skills ?? [],
               career: a.career ?? null,
+              accuracy: a.accuracy ?? 0,
+              technical: a.technical ?? 0,
+              soft: a.soft ?? 0,
+              management: a.management ?? 0,
+              recommendations: a.recommendations ?? [],
+              warnings: a.warnings ?? [],
+              rawInput: (a as { raw_input?: string | null }).raw_input ?? null,
             })),
           };
         });
@@ -568,7 +586,11 @@ export default function AdminDashboard() {
                 {viewing.history.length > 0 ? (
                   <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                     {viewing.history.map((h) => (
-                      <div key={`${h.portfolioTitle}-${h.analyzedAt}`} className="rounded-xl border border-slate-100 bg-white px-3.5 py-3">
+                      <button
+                        key={`${h.portfolioTitle}-${h.analyzedAt}`}
+                        onClick={() => setHistoryDetail(h)}
+                        className="w-full text-left rounded-xl border border-slate-100 bg-white px-3.5 py-3 hover:border-blue-300 hover:shadow-md transition-all"
+                      >
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-xs font-extrabold text-slate-800 truncate">{h.portfolioTitle}</p>
                           <span className="text-[10px] font-medium text-slate-400 flex-shrink-0">{h.analyzedAt}</span>
@@ -585,7 +607,8 @@ export default function AdminDashboard() {
                         ) : (
                           <p className="text-[11px] font-medium text-slate-400 mt-1">รอบนี้ไม่พบทักษะ</p>
                         )}
-                      </div>
+                        <p className="text-[10px] font-bold text-blue-600 mt-2">แตะเพื่อดูผลฉบับเต็ม →</p>
+                      </button>
                     ))}
                   </div>
                 ) : (
@@ -658,6 +681,28 @@ export default function AdminDashboard() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ================= HISTORY RESULT ================= */}
+      {historyDetail && (
+        <ResultModal
+          isOpen
+          onClose={() => setHistoryDetail(null)}
+          files={[new File([''], historyDetail.portfolioTitle, { type: 'image/jpeg' })]}
+          analyzedAt={historyDetail.analyzedLabel}
+          analysis={{
+            skills: historyDetail.skills,
+            career: historyDetail.career,
+            accuracy: historyDetail.accuracy,
+            technical: historyDetail.technical,
+            soft: historyDetail.soft,
+            management: historyDetail.management,
+            recommendations: historyDetail.recommendations,
+            warnings: historyDetail.warnings,
+            rawInput: historyDetail.rawInput,
+            textWarning: null,
+          }}
+        />
       )}
 
       {/* ================= FILE PREVIEW ================= */}

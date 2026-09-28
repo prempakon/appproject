@@ -159,6 +159,7 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
           {lowConfidence && (
             <p className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
               ⚠ AI ไม่มั่นใจผลนี้ (ความแม่นยำ {accuracy}%) — หลักฐานยังน้อยหรือคลุมเครือ อัปโหลดใบเซอร์ ทรานสคริปต์ หรืองานที่ชัดขึ้นแล้ววิเคราะห์ใหม่
+              {modelName?.includes('lite') ? ' (ครั้งนี้โมเดลหลักไม่ว่าง ใช้รุ่นสำรองตอบ ผลอาจละเอียดน้อยกว่า)' : ''}
             </p>
           )}
           

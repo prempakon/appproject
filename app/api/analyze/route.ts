@@ -36,7 +36,7 @@ Bucket definitions:
 RULE: IRRELEVANT files contribute ZERO skills. Every skill must trace to a CERTIFICATE/TRANSCRIPT/PROJECT/REPORT file. Quote or describe the exact evidence per skill in your reasoning.
 
 Synthesize:
-- skills: 6-12 items, English names, ordered by strength of evidence. Each skill must trace to at least one file below. NEVER return generic ["Python","SQL"] unless those are genuinely the strongest evidence.
+- skills: 6-12 items, ordered by strength of evidence, names IN THAI (may append the English term in parentheses, e.g. "การเขียนโปรแกรม (Python)", "การวิเคราะห์ข้อมูล (Data Analysis)"). NEVER return only generic ["Python","SQL"] — extract what is actually in the files.
 - career: one of Software Engineer, Data Scientist, UX Designer, Cybersecurity Analyst, Marketing Strategist, Finance Analyst (nearest match; use the student's stated interest only if the evidence supports it at least partially).
 - Scores 0-100 consistent with evidence: strong matching evidence 75+, weak/mixed 40-70, almost none below 40. accuracy = your honest confidence.
 - recommendations: exactly 2 items in Thai, each naming the biggest gap between the evidence and the suggested career and a concrete way to fill it (course/activity).

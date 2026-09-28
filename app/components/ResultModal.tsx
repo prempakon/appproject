@@ -19,6 +19,15 @@ interface ResultModalProps {
   } | null;
 }
 
+const CAREER_TH: Record<string, string> = {
+  'Software Engineer': 'วิศวกรซอฟต์แวร์',
+  'Data Scientist': 'นักวิทยาศาสตร์ข้อมูล',
+  'UX Designer': 'นักออกแบบประสบการณ์ผู้ใช้',
+  'Cybersecurity Analyst': 'นักวิเคราะห์ความมั่นคงปลอดภัยไซเบอร์',
+  'Marketing Strategist': 'นักกลยุทธ์การตลาด',
+  'Finance Analyst': 'นักวิเคราะห์การเงิน',
+};
+
 export default function ResultModal({ isOpen, onClose, files, analyzedAt, analysis }: ResultModalProps) {
   if (!isOpen) return null;
 
@@ -41,7 +50,7 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
   const technical = analysis.technical;
   const soft = analysis.soft;
   const management = analysis.management;
-  const career = analysis.career ?? 'ยังระบุสายงานไม่ได้';
+  const career = analysis.career ? (CAREER_TH[analysis.career] ?? analysis.career) : 'ยังระบุสายงานไม่ได้';
   const recommendations = analysis.recommendations.length > 0 ? analysis.recommendations : null;
   const warnings = analysis?.warnings && analysis.warnings.length > 0 ? analysis.warnings : null;
   const rawInput = analysis?.rawInput?.trim() ? analysis.rawInput.trim() : null;

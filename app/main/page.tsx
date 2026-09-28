@@ -206,7 +206,8 @@ export default function PortfolioStorage() {
       model: string | null;
     } | null = null;
     // ย่อรูปก่อนส่งให้ AI (ประหยัดโควต้า token + เร็วขึ้น ไฟล์ต้นฉบับยังอัปโหลดเต็มขนาด)
-    const downscaleImage = (file: File, maxSide = 1280): Promise<File> => {
+    // เอกสารตัวหนังสือใช้ 1600px เพื่อให้ AI อ่านข้อความในใบเซอร์ได้ชัด
+    const downscaleImage = (file: File, maxSide = 1600): Promise<File> => {
       return new Promise((resolve) => {
         if (!file.type.startsWith('image/')) {
           resolve(file);
@@ -496,24 +497,39 @@ export default function PortfolioStorage() {
   const handleDragLeave = () => setIsDragging(false);
 
   // เพิ่มรูปจากเครื่องสู่คลังโดยตรง (ไม่ผ่านขั้นตอนวิเคราะห์)
+  const [galleryError, setGalleryError] = useState<string | null>(null);
+
   const handleGalleryDirectSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
     const filesArray = Array.from(e.target.files).filter((f) => f.size <= 10 * 1024 * 1024);
-    if (filesArray.length === 0) return;
+    if (filesArray.length === 0) {
+      setGalleryError('ไฟล์ใหญ่เกิน 10MB ไม่รองรับ');
+      return;
+    }
     setGallerySaving(true);
+    setGalleryError(null);
     try {
       const { getSessionUser } = await import('../../lib/auth');
       const { uploadPortfolioReal } = await import('../../lib/storage');
       const user = await getSessionUser();
-      if (!user) return;
+      if (!user) {
+        setGalleryError('ยังไม่ได้เข้าสู่ระบบจริง (บัญชีทดลอง) — ออกจากระบบแล้วสมัคร/เข้าสู่ระบบด้วยอีเมลรหัสผ่านก่อนเพิ่มรูป');
+        return;
+      }
+      let failed = 0;
       for (const f of filesArray) {
         try {
           await uploadPortfolioReal(user.id, f);
         } catch {
-          // ไฟล์เดียวพัง ข้ามไป
+          failed++;
         }
       }
+      if (failed > 0) {
+        setGalleryError(`เพิ่มได้บางไฟล์ (${filesArray.length - failed}/${filesArray.length}) ที่เหลืออัปโหลดไม่สำเร็จ`);
+      }
       await refreshMyPortfolios();
+    } catch (err) {
+      setGalleryError(err instanceof Error ? err.message : 'เพิ่มรูปไม่สำเร็จ ลองใหม่อีกครั้ง');
     } finally {
       setGallerySaving(false);
       if (galleryFileInputRef.current) galleryFileInputRef.current.value = '';
@@ -831,6 +847,9 @@ export default function PortfolioStorage() {
               </Link>
             </div>
           </div>
+          {galleryError && (
+            <p className="mb-6 text-xs font-bold text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-3">⚠ {galleryError}</p>
+          )}
 
           {gallerySelected.length > 0 && (
             <div className="mb-6 bg-slate-900/90 backdrop-blur-md px-6 py-4 rounded-2xl shadow-2xl flex flex-wrap items-center gap-4">

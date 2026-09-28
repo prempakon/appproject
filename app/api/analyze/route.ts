@@ -147,8 +147,8 @@ export async function POST(req: NextRequest) {
     throw lastErr;
   };
 
-  // โควต้าฟรีนับแยกตามโมเดล: ตัวหลักเต็มให้ตกไปตัวสำรอง (รวม ~3 เท่าของโควต้ารายวัน)
-  const MODELS = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash'];
+  // โควต้าฟรีนับแยกตามโมเดล: ตัวหลักเต็ม/overload ให้ตกไปตัวสำรอง (รุ่น lite ท้ายแถวว่างบ่อยกว่า)
+  const MODELS = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash-lite'];
   const isQuotaError = (e: unknown) => {
     const msg = e instanceof Error ? e.message : String(e);
     return /429|quota|RESOURCE_EXHAUSTED/i.test(msg);

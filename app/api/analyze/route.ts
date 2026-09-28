@@ -238,7 +238,12 @@ function noteOf(v: unknown): string | null {
 }
 
 function clampNum(v: unknown, fallback: number) {
-  const n = typeof v === 'number' ? Math.round(v) : NaN;
+  const n =
+    typeof v === 'number'
+      ? Math.round(v)
+      : typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Number(v))
+        ? Math.round(Number(v))
+        : NaN;
   if (Number.isNaN(n)) return fallback;
   return Math.min(100, Math.max(0, n));
 }

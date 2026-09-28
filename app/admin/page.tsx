@@ -479,7 +479,7 @@ export default function AdminDashboard() {
               <div>
                 <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wide mb-2">ผลงานที่อัปโหลด ({viewing.files} ไฟล์)</p>
                 {viewing.realFiles.length > 0 ? (
-                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                  <div className="grid grid-cols-3 gap-3 max-h-72 overflow-y-auto pr-1">
                     {viewing.realFiles.map((file) => {
                       const isImage = /^(JPG|JPEG|PNG|GIF|WEBP)$/i.test(file.file_type);
                       const isAnalyzed = analyzedIds.includes(file.id);
@@ -487,25 +487,22 @@ export default function AdminDashboard() {
                         <button
                           key={file.file_url}
                           onClick={() => isImage && setPreviewFile(file)}
-                          className="w-full flex items-center gap-3 rounded-xl border border-slate-100 hover:border-blue-300 px-2.5 py-2 transition-all text-left"
+                          className="group text-left rounded-xl overflow-hidden border border-slate-100 hover:border-blue-300 hover:shadow-md transition-all bg-white"
                         >
                           {isImage ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={file.file_url} alt={file.title} className="w-14 h-14 rounded-lg object-cover flex-shrink-0 bg-slate-100" />
+                            <img src={file.file_url} alt={file.title} className="w-full h-28 object-cover group-hover:scale-105 transition-transform duration-300" />
                           ) : (
-                            <span className="w-14 h-14 rounded-lg bg-slate-100 text-slate-400 text-[10px] font-extrabold flex items-center justify-center flex-shrink-0">
+                            <span className="w-full h-28 flex flex-col items-center justify-center gap-1 bg-slate-50 text-slate-400 text-[10px] font-extrabold">
                               {file.file_type}
                             </span>
                           )}
-                          <span className="min-w-0 flex-grow">
-                            <span className="block text-xs font-bold text-slate-700 truncate">{file.title}</span>
-                            <span className="mt-1 flex items-center gap-1.5">
-                              <span className="block text-[10px] font-medium text-slate-400">
-                                {new Date(file.created_at).toLocaleDateString('th-TH')} · {isImage ? 'แตะเพื่อดูรูป' : file.file_type}
-                              </span>
-                              <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${isAnalyzed ? 'text-emerald-700 bg-emerald-50' : 'text-amber-700 bg-amber-50'}`}>
-                                {isAnalyzed ? 'วิเคราะห์แล้ว' : 'ยังไม่วิเคราะห์'}
-                              </span>
+                          <span className="block px-2 pt-1.5">
+                            <span className="block text-[10px] font-bold text-slate-600 truncate group-hover:text-blue-600">{file.title}</span>
+                          </span>
+                          <span className="block px-2 pb-2 pt-1">
+                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${isAnalyzed ? 'text-emerald-700 bg-emerald-50' : 'text-amber-700 bg-amber-50'}`}>
+                              {isAnalyzed ? 'วิเคราะห์แล้ว' : 'ยังไม่วิเคราะห์'}
                             </span>
                           </span>
                         </button>

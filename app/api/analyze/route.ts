@@ -96,13 +96,28 @@ export async function POST(req: NextRequest) {
   ];
 
   const fileNames: string[] = [];
+  let oversized = 0;
   for (const file of files.slice(0, 6)) {
-    if (file.size <= 0 || file.size > 10 * 1024 * 1024) continue;
+    if (file.size <= 0) continue;
+    if (file.size > 10 * 1024 * 1024) {
+      oversized++;
+      continue;
+    }
     const buf = Buffer.from(await file.arrayBuffer());
     fileNames.push(file.name || 'file');
     parts.push({
       inlineData: { mimeType: file.type || 'image/jpeg', data: buf.toString('base64') },
     });
+  }
+  // ไฟล์ทั้งหมดใหญ่เกิน → บอกตรงๆ แทนการวิเคราะห์อากาศแล้วคืน 0%
+  if (files.length > 0 && fileNames.length === 0) {
+    return NextResponse.json(
+      { error: `ไฟล์ใหญ่เกิน 10MB ทั้งหมด (${oversized} ไฟล์) ลดขนาดไฟล์แล้วลองใหม่` },
+      { status: 400 },
+    );
+  }
+  if (fileNames.length === 0 && !interestText.trim() && !major.trim()) {
+    return NextResponse.json({ error: 'ไม่มีไฟล์หรือข้อมูลให้วิเคราะห์' }, { status: 400 });
   }
   if (fileNames.length > 0) {
     parts[0] = {

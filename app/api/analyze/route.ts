@@ -153,6 +153,11 @@ export async function POST(req: NextRequest) {
     return /429|quota|RESOURCE_EXHAUSTED/i.test(msg);
   };
 
+  const isOverloaded = (e: unknown) => {
+    const msg = e instanceof Error ? e.message : String(e);
+    return /503|UNAVAILABLE|overload/i.test(msg);
+  };
+
   try {
     let res;
     let usedModel = MODELS[0];
@@ -171,8 +176,8 @@ export async function POST(req: NextRequest) {
         break;
       } catch (e) {
         lastErr = e;
-        // เต็มโควต้า -> ลองโมเดลถัดไป, error อื่น -> โยนเลย
-        if (!isQuotaError(e)) throw e;
+        // เต็มโควต้า / โมเดล overload -> ลองโมเดลถัดไป, error อื่น -> โยนเลย
+        if (!isQuotaError(e) && !isOverloaded(e)) throw e;
       }
     }
     if (!res) throw lastErr;

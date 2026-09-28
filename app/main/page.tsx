@@ -517,15 +517,20 @@ export default function PortfolioStorage() {
         return;
       }
       let failed = 0;
+      let firstErr = '';
       for (const f of filesArray) {
         try {
           await uploadPortfolioReal(user.id, f);
-        } catch {
+        } catch (err) {
+          if (!firstErr) firstErr = err instanceof Error ? err.message : String(err);
           failed++;
         }
       }
       if (failed > 0) {
-        setGalleryError(`เพิ่มได้บางไฟล์ (${filesArray.length - failed}/${filesArray.length}) ที่เหลืออัปโหลดไม่สำเร็จ`);
+        setGalleryError(
+          `เพิ่มได้บางไฟล์ (${filesArray.length - failed}/${filesArray.length}) ที่เหลืออัปโหลดไม่สำเร็จ` +
+          (firstErr ? ` — สาเหตุ: ${firstErr}` : ''),
+        );
       }
       await refreshMyPortfolios();
     } catch (err) {

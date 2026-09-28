@@ -53,6 +53,7 @@ export default function AdminDashboard() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'analyzed' | 'pending'>('all');
   const [page, setPage] = useState(1);
   const [viewing, setViewing] = useState<StudentRow | null>(null);
+  const [fileFilter, setFileFilter] = useState<'all' | 'analyzed' | 'pending'>('all');
   const [deleting, setDeleting] = useState<StudentRow | null>(null);
   const [previewFile, setPreviewFile] = useState<RealFile | null>(null);
   const [editing, setEditing] = useState<StudentRow | null>(null);
@@ -335,7 +336,7 @@ export default function AdminDashboard() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
-                          <button onClick={() => setViewing(row)} className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-bold transition-colors active:scale-95">
+                          <button onClick={() => { setFileFilter('all'); setViewing(row); }} className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-bold transition-colors active:scale-95">
                             ดูข้อมูล
                           </button>
                           <button onClick={() => openEdit(row)} aria-label={`แก้ไข ${row.name}`} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors">
@@ -484,10 +485,34 @@ export default function AdminDashboard() {
                 )}
               </div>
               <div>
-                <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wide mb-2">ผลงานที่อัปโหลด ({viewing.files} ไฟล์)</p>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wide">ผลงานที่อัปโหลด ({viewing.files} ไฟล์)</p>
+                  <div className="flex gap-1.5">
+                    {([
+                      { key: 'all', label: 'ทั้งหมด' },
+                      { key: 'analyzed', label: 'วิเคราะห์แล้ว' },
+                      { key: 'pending', label: 'ยังไม่วิเคราะห์' },
+                    ] as const).map((opt) => (
+                      <button
+                        key={opt.key}
+                        onClick={() => setFileFilter(opt.key)}
+                        className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full transition-colors ${fileFilter === opt.key ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 {viewing.realFiles.length > 0 ? (
                   <div className="grid grid-cols-3 gap-3 max-h-72 overflow-y-auto pr-1">
-                    {viewing.realFiles.map((file) => {
+                    {viewing.realFiles
+                      .filter((file) => {
+                        const isAnalyzed = analyzedIds.includes(file.id);
+                        if (fileFilter === 'analyzed') return isAnalyzed;
+                        if (fileFilter === 'pending') return !isAnalyzed;
+                        return true;
+                      })
+                      .map((file) => {
                       const isImage = /^(JPG|JPEG|PNG|GIF|WEBP)$/i.test(file.file_type);
                       const isAnalyzed = analyzedIds.includes(file.id);
                       return (

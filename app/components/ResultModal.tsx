@@ -122,6 +122,11 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
               <div className="text-center mt-2">
                 <p className="text-xs font-bold text-slate-800 mb-1">ความสอดคล้องสายงาน</p>
                 <p className="text-xs text-slate-500">{career}</p>
+                {!analysis.career && (
+                  <p className="text-[11px] text-slate-400 mt-1.5">
+                    หลักฐานยังน้อย (ความแม่นยำ {accuracy}%) อัปโหลดใบเซอร์ ทรานสคริปต์ หรืองานโปรเจกต์เพิ่มเพื่อให้ AI แนะนำสายงานได้
+                  </p>
+                )}
               </div>
             </div>
 

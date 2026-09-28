@@ -38,7 +38,7 @@ RULE: IRRELEVANT files contribute ZERO skills. Every skill must trace to a CERTI
 
 Synthesize:
 - skills: 6-12 items, ordered by strength of evidence, names IN THAI (may append the English term in parentheses, e.g. "การเขียนโปรแกรม (Python)", "การวิเคราะห์ข้อมูล (Data Analysis)"). NEVER return only generic ["Python","SQL"] — extract what is actually in the files.
-- career: FREE-FORM Thai text describing the best-fit career or study path based on the evidence AND the student's stated interest (e.g. "วิศวกรซอฟต์แวร์", "นักวิทยาศาสตร์ข้อมูล", "หมอ", "พยาบาล", "ครู"). Do NOT restrict to any list — respond like a chat AI reading the actual person. If evidence is weak, name the interest but keep scores honest.
+- career: FREE-FORM Thai text describing the best-fit career or study path based on the evidence AND the student's stated interest (e.g. "วิศวกรซอฟต์แวร์", "นักวิทยาศาสตร์ข้อมูล", "หมอ", "พยาบาล", "ครู"). Do NOT restrict to any list — respond like a chat AI reading the actual person. If evidence is weak, name the interest but keep scores honest. If your accuracy would be below 30, set career to null instead of guessing.
 - careerEn: for curriculum statistics, the NEAREST of [Software Engineer, Data Scientist, UX Designer, Cybersecurity Analyst, Marketing Strategist, Finance Analyst], or null if none fits (e.g. doctor/nurse/teacher).
 - Scores 0-100 consistent with evidence: strong matching evidence 75+, weak/mixed 40-70, almost none below 40. accuracy = your honest confidence.
 - recommendations: exactly 2 items in Thai, each MUST cite the specific file/fact it responds to (e.g. start the detail with "จาก[ชื่อไฟล์/สิ่งที่เห็น]..."), naming the biggest gap between the evidence and the suggested career and a concrete way to fill it (course/activity). Generic advice with no file reference is forbidden.
@@ -196,6 +196,11 @@ export async function POST(req: NextRequest) {
       textWarning: typeof parsed.textWarning === 'string' && parsed.textWarning.trim() ? parsed.textWarning.trim().slice(0, 300) : null,
       _model: usedModel,
     };
+    // ซื่อสัตย์: ความมั่นใจต่ำกว่า 30% ห้ามฟันธงอาชีพ
+    if (result.accuracy < 30) {
+      result.career = null;
+      result.careerEn = null;
+    }
     return NextResponse.json(result);
   } catch (err) {
     const msg = err instanceof Error ? err.message.slice(0, 300) : String(err).slice(0, 300);

@@ -70,3 +70,25 @@ export async function saveAnalysisReal(userId: string, portfolioId: string, inpu
   if (error) throw error;
   return data;
 }
+
+function storagePathFromUrl(bucket: string, fileUrl: string): string | null {
+  const marker = `/storage/v1/object/public/${bucket}/`;
+  const idx = fileUrl.indexOf(marker);
+  if (idx === -1) return null;
+  return fileUrl.slice(idx + marker.length).split('?')[0];
+}
+
+// ลบไฟล์ของตัวเอง: ลบ object ใน Storage + แถว portfolios (analysis_results ลบตาม cascade)
+export async function deletePortfolioReal(userId: string, portfolioId: string, fileUrl: string) {
+  const path = storagePathFromUrl('portfolios', fileUrl);
+  if (path) {
+    const { error: stErr } = await supabase.storage.from('portfolios').remove([path]);
+    if (stErr) throw stErr;
+  }
+  const { error: dbErr } = await supabase
+    .from('portfolios')
+    .delete()
+    .eq('id', portfolioId)
+    .eq('user_id', userId);
+  if (dbErr) throw dbErr;
+}

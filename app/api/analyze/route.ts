@@ -19,6 +19,7 @@ interface AIResult {
   recommendations: AIRecommendation[];
   warnings: string[];
   textWarning: string | null;
+  _model?: string;
 }
 
 const SYSTEM_PROMPT = `You are a skill-analysis engine for a Thai university (Loei Rajabhat University) student portfolio system.
@@ -100,8 +101,7 @@ export async function POST(req: NextRequest) {
     };
   }
 
-  const parseJson = (text: string) => {
-    const clean = text.trim()
+  const parseJson = (text: string) => {    const clean = text.trim()
       .replace(/^```json\s*/i, '')
       .replace(/^```\s*/i, '')
       .replace(/\s*```$/i, '');
@@ -118,8 +118,9 @@ export async function POST(req: NextRequest) {
   };
 
   const isRetryable = (e: unknown) => {
+    // 429 โควต้าไม่ retry ในรุ่นเดิม (ข้ามไปโมเดลถัดไปทันที) — retry แค่ error ชั่วคราวฝั่งเซิร์ฟเวอร์
     const msg = e instanceof Error ? e.message : String(e);
-    return /503|429|UNAVAILABLE|quota|overload|timeout|TRUNCAT/i.test(msg);
+    return /503|UNAVAILABLE|overload|timeout|TRUNCAT/i.test(msg) && !/429|quota|RESOURCE_EXHAUSTED/i.test(msg);
   };
 
   const callWithRetry = async <T>(fn: () => Promise<T>, label: string): Promise<T> => {
@@ -137,12 +138,33 @@ export async function POST(req: NextRequest) {
     throw lastErr;
   };
 
+  // โควต้าฟรีนับแยกตามโมเดล: ตัวหลักเต็มให้ตกไปตัวสำรอง (รวม ~3 เท่าของโควต้ารายวัน)
+  const MODELS = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash'];
+  const isQuotaError = (e: unknown) => {
+    const msg = e instanceof Error ? e.message : String(e);
+    return /429|quota|RESOURCE_EXHAUSTED/i.test(msg);
+  };
+
   try {
-    const res = await callWithRetry(() => ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: [{ role: 'user', parts }],
-      config: { temperature: 0.2, thinkingConfig: { thinkingBudget: 4096 } },
-    }), 'analyze');
+    let res;
+    let usedModel = MODELS[0];
+    let lastErr: unknown = null;
+    for (const model of MODELS) {
+      try {
+        res = await callWithRetry(() => ai.models.generateContent({
+          model,
+          contents: [{ role: 'user', parts }],
+          config: { temperature: 0.2, thinkingConfig: { thinkingBudget: 4096 } },
+        }), `analyze:${model}`);
+        usedModel = model;
+        break;
+      } catch (e) {
+        lastErr = e;
+        // เต็มโควต้า -> ลองโมเดลถัดไป, error อื่น -> โยนเลย
+        if (!isQuotaError(e)) throw e;
+      }
+    }
+    if (!res) throw lastErr;
     const text = (res.text ?? '').trim();
     const parsed = parseJson(text) as Partial<AIResult>;
     if (!Array.isArray(parsed.skills)) {
@@ -165,6 +187,7 @@ export async function POST(req: NextRequest) {
         ? parsed.warnings.map(String).slice(0, 6)
         : [],
       textWarning: typeof parsed.textWarning === 'string' && parsed.textWarning.trim() ? parsed.textWarning.trim().slice(0, 300) : null,
+      _model: usedModel,
     };
     return NextResponse.json(result);
   } catch (err) {

@@ -35,6 +35,7 @@ Bucket definitions:
 - PROJECT:งานโปรเจกต์/ภาพหน้าจอโค้ด/ดีไซน์/prototype/poster ที่มีเนื้อหางานจริง
 - REPORT:รายงาน/เอกสารประกอบที่มีเนื้อหาวิชาการ
 - IRRELEVANT:selfie, รูปคน, รูปจดโน้ตมั่วๆ ที่อ่านไม่ออกหรือไม่เกี่ยวกับวิชา, meme, ภาพว่าง/เบลอจนดูไม่ออก, ภาพซ้ำ
+- NOTE: ตราประทับ "SAMPLE / ตัวอย่าง / SPECIMEN" บนใบเซอร์เป็นแค่ลายน้ำตัวอย่าง ให้นับเป็น CERTIFICATE ตามเนื้อหา ห้ามหักความมั่นใจเพราะลายน้ำ
 RULE: IRRELEVANT files contribute ZERO skills. Every skill must trace to a CERTIFICATE/TRANSCRIPT/PROJECT/REPORT file. Quote or describe the exact evidence per skill in your reasoning.
 
 Synthesize:

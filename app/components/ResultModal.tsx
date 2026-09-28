@@ -16,6 +16,7 @@ interface ResultModalProps {
     warnings?: string[];
     rawInput?: string | null;
     textWarning?: string | null;
+    model?: string | null;
     skillNotes?: { technical: string | null; soft: string | null; management: string | null };
   } | null;
 }
@@ -65,6 +66,7 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
   const rawInput = analysis?.rawInput?.trim() ? analysis.rawInput.trim() : null;
   const textWarning = analysis?.textWarning?.trim() ? analysis.textWarning.trim() : null;
   const lowConfidence = accuracy < 30;
+  const modelName = analysis?.model?.trim() ? analysis.model.trim() : null;
 
   const downloadPdf = async () => {
     if (!reportRef.current || downloading) return;
@@ -131,6 +133,9 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
               </svg>
             </div>
             <h3 className="text-xl font-extrabold text-slate-800">ผลการวิเคราะห์ทักษะด้วยระบบ AI</h3>
+            {modelName && (
+              <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full whitespace-nowrap">AI: {modelName}</span>
+            )}
           </div>
           
           <div className="flex items-center gap-6 text-xs font-medium text-slate-500">

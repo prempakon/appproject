@@ -38,6 +38,7 @@ type HistoryItem = {
     rawInput: string | null;
     textWarning: string | null;
     skillNotes: { technical: string | null; soft: string | null; management: string | null };
+    model: string | null;
   } | null;
 };
 
@@ -84,6 +85,7 @@ export default function PortfolioStorage() {
     rawInput: string | null;
     textWarning: string | null;
     skillNotes: { technical: string | null; soft: string | null; management: string | null };
+    model: string | null;
   } | null>(null);
   const [myPortfolios, setMyPortfolios] = useState<{ id: string; title: string; file_url: string; file_type: string; created_at: string }[]>([]);
   const [myHistory, setMyHistory] = useState<{
@@ -105,6 +107,7 @@ export default function PortfolioStorage() {
       rawInput: string | null;
       textWarning: string | null;
       skillNotes: { technical: string | null; soft: string | null; management: string | null };
+      model: string | null;
     };
   }[]>([]);
 
@@ -135,6 +138,7 @@ export default function PortfolioStorage() {
           rawInput: a.raw_input ?? null,
           textWarning: null,
           skillNotes: a.skill_notes ?? { technical: null, soft: null, management: null },
+          model: null,
         },
       })));
     } catch {
@@ -199,6 +203,7 @@ export default function PortfolioStorage() {
       rawInput: string | null;
       textWarning: string | null;
       skillNotes: { technical: string | null; soft: string | null; management: string | null };
+      model: string | null;
     } | null = null;
     // ย่อรูปก่อนส่งให้ AI (ประหยัดโควต้า token + เร็วขึ้น ไฟล์ต้นฉบับยังอัปโหลดเต็มขนาด)
     const downscaleImage = (file: File, maxSide = 1280): Promise<File> => {
@@ -271,6 +276,7 @@ export default function PortfolioStorage() {
           soft: typeof data.skillNotes?.soft === 'string' ? data.skillNotes.soft : null,
           management: typeof data.skillNotes?.management === 'string' ? data.skillNotes.management : null,
         },
+        model: typeof data._model === 'string' ? data._model : null,
       };
       setAiResult(ai);
     } catch (err) {

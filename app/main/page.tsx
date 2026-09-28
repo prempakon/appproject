@@ -168,6 +168,7 @@ export default function PortfolioStorage() {
 
   const openMediaModal = () => {
     setSelectedModalFiles([]);
+    setModalError(null);
     setIsMediaModalOpen(true);
   };
 
@@ -380,11 +381,27 @@ export default function PortfolioStorage() {
     return s.startsWith('db-') ? s.slice(3) : null;
   };
 
-  const confirmGallerySelection = () => {
-    const mockFiles = selectedModalFiles.map((f) => new File([''], f.title, { type: f.type === 'PDF' ? 'application/pdf' : 'image/jpeg' }));
-    const urls = selectedModalFiles.map(f => f.imageUrl);
-    const ids = selectedModalFiles.map((f) => dbIdOf(f.id));
-    handleFilesSelected(mockFiles, urls, ids);
+  const [modalError, setModalError] = useState<string | null>(null);
+
+  const confirmGallerySelection = async () => {
+    setModalError(null);
+    // ดึงไฟล์จริงจาก URL ในคลัง (ห้ามส่ง File เปล่า ไม่งั้น AI ได้ 0 ไฟล์แล้วมโนทักษะจากสาขา)
+    const files: File[] = [];
+    const urls: string[] = [];
+    const ids: (string | null)[] = [];
+    for (const f of selectedModalFiles) {
+      const real = await fetchUrlAsFile(f.imageUrl, f.title);
+      if (real) {
+        files.push(real);
+        urls.push(f.imageUrl);
+        ids.push(dbIdOf(f.id));
+      }
+    }
+    if (files.length === 0) {
+      setModalError('ดึงไฟล์จากคลังไม่สำเร็จ (ติด CORS หรือลิงก์เสีย) ลองเลือกไฟล์อื่น');
+      return;
+    }
+    handleFilesSelected(files, urls, ids);
   };
 
   // ลากการ์ดจากคลัง: แนบข้อมูลรูปไปกับ drag event (รองรับหลายรูปที่เลือกไว้)
@@ -571,7 +588,7 @@ export default function PortfolioStorage() {
                   <h3 className="text-2xl font-extrabold text-slate-800">เลือกไฟล์จากคลาวด์</h3>
                   <p className="text-slate-500 text-sm mt-1">ดึงผลงานเดิมที่คุณเคยอัปโหลดไว้ มาวิเคราะห์ซ้ำได้ทันที (เลือกได้หลายไฟล์)</p>
                 </div>
-                <button onClick={() => setIsMediaModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors">
+                <button onClick={() => { setModalError(null); setIsMediaModalOpen(false); }} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
@@ -613,8 +630,11 @@ export default function PortfolioStorage() {
               ) : (
                 <p className="py-16 text-sm font-bold text-slate-400 text-center">ยังไม่มีไฟล์ในคลัง<br />เพิ่มรูปจากเครื่องก่อน แล้วค่อยกลับมาเลือกที่นี่</p>
               )}
+              {modalError && (
+                <p className="mb-4 text-xs font-bold text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-center">⚠ {modalError}</p>
+              )}
               {selectedModalFiles.length > 0 && (
-                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur-md px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-6 animate-in slide-in-from-bottom-10 duration-300">
+                <div className="sticky bottom-6 mx-auto w-fit bg-slate-900/90 backdrop-blur-md px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-6 animate-in slide-in-from-bottom-10 duration-300">
                   <span className="text-white font-medium text-sm whitespace-nowrap">เลือกแล้ว <span className="font-extrabold text-blue-400">{selectedModalFiles.length}</span> รายการ</span>
                   <button onClick={confirmGallerySelection} className="px-6 py-2 bg-blue-500 hover:bg-blue-400 text-white rounded-full font-bold text-sm transition-all active:scale-95 whitespace-nowrap">ยืนยันการนำเข้า</button>
                 </div>

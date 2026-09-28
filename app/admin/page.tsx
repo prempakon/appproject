@@ -45,11 +45,27 @@ const PAGE_SIZE = 7;
 export default function AdminDashboard() {
   const router = useRouter();
 
+  const [rows, setRows] = useState<StudentRow[]>([]);
+  const [analyzedIds, setAnalyzedIds] = useState<string[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [careerFilter, setCareerFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'analyzed' | 'pending'>('all');
+  const [page, setPage] = useState(1);
+  const [viewing, setViewing] = useState<StudentRow | null>(null);
+  const [deleting, setDeleting] = useState<StudentRow | null>(null);
+  const [previewFile, setPreviewFile] = useState<RealFile | null>(null);
+  const [editing, setEditing] = useState<StudentRow | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', institution: '', major: '', role: 'student' });
+  const [editBusy, setEditBusy] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
   useEffect(() => {
     const role = localStorage.getItem('userRole');
     // ถ้าไม่ใช่ admin ให้เด้งกลับหน้า Login ทันที
     if (role !== 'admin') {
       router.push('/');
+      return;
     }
     // ดึงข้อมูลจริงจาก DB (ไม่มี mock — ว่างก็โชว์ว่าง)
     (async () => {
@@ -93,21 +109,6 @@ export default function AdminDashboard() {
       }
     })();
   }, [router]);
-
-  const [rows, setRows] = useState<StudentRow[]>([]);
-  const [analyzedIds, setAnalyzedIds] = useState<string[]>([]);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [careerFilter, setCareerFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'analyzed' | 'pending'>('all');
-  const [page, setPage] = useState(1);
-  const [viewing, setViewing] = useState<StudentRow | null>(null);
-  const [deleting, setDeleting] = useState<StudentRow | null>(null);
-  const [previewFile, setPreviewFile] = useState<RealFile | null>(null);
-  const [editing, setEditing] = useState<StudentRow | null>(null);
-  const [editForm, setEditForm] = useState({ name: '', institution: '', major: '', role: 'student' });
-  const [editBusy, setEditBusy] = useState(false);
-  const [editError, setEditError] = useState<string | null>(null);
 
   const openEdit = (row: StudentRow) => {
     setViewing(null);

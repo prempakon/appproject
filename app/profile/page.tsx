@@ -5,33 +5,34 @@ import { useRouter } from 'next/navigation';
 
 export default function ProfilePage() {
   const router = useRouter();
-  const [profile, setProfile] = useState({
-    name: 'นักศึกษา LRU',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150',
-    institution: 'มหาวิทยาลัยราชภัฏเลย',
-    major: '-',
-    bio: 'ยังไม่ได้กรอก'
+  const [profile, setProfile] = useState(() => {
+    const fallback = {
+      name: 'นักศึกษา LRU',
+      avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150',
+      institution: 'มหาวิทยาลัยราชภัฏเลย',
+      major: '-',
+      bio: 'ยังไม่ได้กรอก'
+    };
+    try {
+      const saved = typeof window === 'undefined' ? null : localStorage.getItem('userProfile');
+      if (saved) return { ...fallback, ...JSON.parse(saved) };
+    } catch (e) {
+      console.error(e);
+    }
+    return fallback;
   });
 
   useEffect(() => {
-    // local ทันที (fallback เดิม) แล้วค่อยทับด้วย DB จริงถ้ามี session
-    const saved = localStorage.getItem('userProfile');
-    if (saved) {
-      try {
-        const data = JSON.parse(saved);
-        setProfile(prev => ({ ...prev, ...data }));
-      } catch (e) {
-        console.error(e);
-      }
-    }
+    // local โหลดพร้อม state ตั้งแต่ต้นแล้ว ตรงนี้ทับด้วย DB จริงถ้ามี session
+    let cancelled = false;
     (async () => {
       try {
         const { getSessionUser } = await import('../../lib/auth');
         const { getMyProfile } = await import('../../lib/profiles');
         const user = await getSessionUser();
-        if (!user) return;
+        if (!user || cancelled) return;
         const db = await getMyProfile(user.id);
-        if (db) {
+        if (db && !cancelled) {
           setProfile({
             name: db.name,
             avatar: db.avatar_url || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150',
@@ -44,6 +45,9 @@ export default function ProfilePage() {
         // เงียบไว้ ใช้ local ต่อ
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (

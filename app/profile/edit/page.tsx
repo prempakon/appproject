@@ -1,55 +1,56 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
+
+function loadSavedProfile() {
+  const initial = {
+    formData: {
+      firstName: '',
+      lastName: '',
+      institution: 'มหาวิทยาลัยราชภัฏเลย',
+      major: '',
+      bio: '',
+    },
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150',
+  };
+  try {
+    const savedProfile = typeof window === 'undefined' ? null : localStorage.getItem('userProfile');
+    if (!savedProfile) return initial;
+    const data = JSON.parse(savedProfile);
+    const fullName = (data.name || '').trim();
+    const lastSpaceIndex = fullName.lastIndexOf(' ');
+    let fName = fullName;
+    let lName = '';
+    if (lastSpaceIndex !== -1) {
+      fName = fullName.substring(0, lastSpaceIndex);
+      lName = fullName.substring(lastSpaceIndex + 1);
+    }
+    return {
+      formData: {
+        firstName: fName || '',
+        lastName: lName || '',
+        institution: data.institution || 'มหาวิทยาลัยราชภัฏเลย',
+        major: data.major || '',
+        bio: data.bio || '',
+      },
+      avatar: data.avatar || initial.avatar,
+    };
+  } catch (e) {
+    console.error('Error parsing profile', e);
+    return initial;
+  }
+}
 
 export default function EditProfilePage() {
   const router = useRouter();
-  
-  const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    institution: 'มหาวิทยาลัยราชภัฏเลย',
-    major: '',
-    bio: '',
-  });
+  const [saved] = useState(loadSavedProfile);
 
-  const [previewAvatar, setPreviewAvatar] = useState('https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150');
+  const [formData, setFormData] = useState(saved.formData);
+
+  const [previewAvatar, setPreviewAvatar] = useState(saved.avatar);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
-
-  // โหลดข้อมูลเดิมที่มีใน localStorage มาแยกใส่ช่องชื่อและนามสกุลให้ถูกต้อง
-  useEffect(() => {
-    const savedProfile = localStorage.getItem('userProfile');
-    if (savedProfile) {
-      try {
-        const data = JSON.parse(savedProfile);
-        const fullName = (data.name || '').trim();
-        const lastSpaceIndex = fullName.lastIndexOf(' ');
-        
-        let fName = fullName;
-        let lName = '';
-        
-        if (lastSpaceIndex !== -1) {
-          fName = fullName.substring(0, lastSpaceIndex);
-          lName = fullName.substring(lastSpaceIndex + 1);
-        }
-
-        setFormData({
-          firstName: fName || '',
-          lastName: lName || '',
-          institution: data.institution || 'มหาวิทยาลัยราชภัฏเลย',
-          major: data.major || '',
-          bio: data.bio || '',
-        });
-        if (data.avatar) {
-          setPreviewAvatar(data.avatar);
-        }
-      } catch (e) {
-        console.error('Error parsing profile', e);
-      }
-    }
-  }, []);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {

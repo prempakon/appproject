@@ -30,6 +30,9 @@ const CAREER_TH: Record<string, string> = {
 };
 
 export default function ResultModal({ isOpen, onClose, files, analyzedAt, analysis }: ResultModalProps) {
+  const reportRef = useRef<HTMLDivElement>(null);
+  const [downloading, setDownloading] = useState(false);
+
   if (!isOpen) return null;
 
   const analyzedLabel = analyzedAt ?? new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -61,8 +64,6 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
   const warnings = analysis?.warnings && analysis.warnings.length > 0 ? analysis.warnings : null;
   const rawInput = analysis?.rawInput?.trim() ? analysis.rawInput.trim() : null;
   const textWarning = analysis?.textWarning?.trim() ? analysis.textWarning.trim() : null;
-  const reportRef = useRef<HTMLDivElement>(null);
-  const [downloading, setDownloading] = useState(false);
 
   const downloadPdf = async () => {
     if (!reportRef.current || downloading) return;

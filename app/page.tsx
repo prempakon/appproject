@@ -185,7 +185,6 @@ export default function LoginPage() {
           <div className="space-y-2">
             <div className="flex justify-between items-center">
               <label htmlFor="password" className="block text-medium font-medium text-gray-700">รหัสผ่าน</label>
-              <a href="#" className="text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors">ลืมรหัสผ่าน?</a>
             </div>
             <div className="relative">
               <input 

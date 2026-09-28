@@ -4,12 +4,41 @@ import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import ResultModal from '../components/ResultModal'; 
 
-type UserProfile = {  name: string;
+type UserProfile = {
+  name: string;
   avatar: string;
   institution?: string;
   major?: string;
   bio?: string;
   githubLink?: string;
+};
+
+type CloudFile = {
+  id: string | number;
+  title: string;
+  type: string;
+  imageUrl: string;
+};
+
+type HistoryItem = {
+  id: string;
+  title: string;
+  analyzedAt: string;
+  type: string;
+  analysis: {
+    skills: string[];
+    career: string | null;
+    careerEn: string | null;
+    accuracy: number;
+    technical: number;
+    soft: number;
+    management: number;
+    recommendations: { title: string; detail: string }[];
+    warnings: string[];
+    rawInput: string | null;
+    textWarning: string | null;
+    skillNotes: { technical: string | null; soft: string | null; management: string | null };
+  } | null;
 };
 
 export default function PortfolioStorage() {
@@ -27,12 +56,21 @@ export default function PortfolioStorage() {
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
 
   const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
-  const [selectedModalFiles, setSelectedModalFiles] = useState<any[]>([]);
+  const [selectedModalFiles, setSelectedModalFiles] = useState<CloudFile[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const galleryFileInputRef = useRef<HTMLInputElement>(null);
   const [gallerySaving, setGallerySaving] = useState(false);
 
-  const [userProfile, setUserProfile] = useState<UserProfile>({ name: 'User', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150' });
+  const [userProfile] = useState<UserProfile>(() => {
+    const fallback = { name: 'User', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150' };
+    try {
+      const saved = typeof window === 'undefined' ? null : localStorage.getItem('userProfile');
+      if (saved) return { ...fallback, ...JSON.parse(saved) };
+    } catch {
+      // ใช้ค่าเริ่มต้น
+    }
+    return fallback;
+  });
   const [aiResult, setAiResult] = useState<{
     skills: string[];
     career: string | null;
@@ -105,10 +143,8 @@ export default function PortfolioStorage() {
   };
 
   useEffect(() => {
-    const saved = localStorage.getItem('userProfile');
-    if (saved) {
-      setUserProfile(JSON.parse(saved));
-    }
+    // โหลดข้อมูลคลังครั้งแรกจาก DB (async fetch คือ external sync ที่ถูกต้องใน effect)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     refreshMyPortfolios();
   }, []);
 
@@ -126,9 +162,10 @@ export default function PortfolioStorage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    if (isMediaModalOpen) setSelectedModalFiles([]);
-  }, [isMediaModalOpen]);
+  const openMediaModal = () => {
+    setSelectedModalFiles([]);
+    setIsMediaModalOpen(true);
+  };
 
   useEffect(() => {
     return () => { previewUrls.forEach(url => { if (url.startsWith('blob:')) URL.revokeObjectURL(url); }); };
@@ -295,7 +332,7 @@ export default function PortfolioStorage() {
     refreshMyPortfolios();
   };
 
-  const openHistoryModal = (fileData: any) => {
+  const openHistoryModal = (fileData: HistoryItem) => {
     const mockFile = new File([''], fileData.title, { type: fileData.type === 'PDF' ? 'application/pdf' : 'image/jpeg' });
     setSelectedFiles([mockFile]);
     setSelectedExistingIds([null]);
@@ -323,7 +360,7 @@ export default function PortfolioStorage() {
 
   const [dropError, setDropError] = useState('');
 
-  const toggleGallerySelection = (fileData: any) => {
+  const toggleGallerySelection = (fileData: CloudFile) => {
     setSelectedModalFiles((prev) => {
       const isAlreadySelected = prev.some((f) => f.id === fileData.id);
       return isAlreadySelected ? prev.filter((f) => f.id !== fileData.id) : [...prev, fileData];
@@ -527,8 +564,16 @@ export default function PortfolioStorage() {
                       )}
                       <div className="aspect-[4/3] relative overflow-hidden bg-slate-100">
                         <div className="absolute top-2 left-2 z-10 bg-white/95 px-2 py-1 rounded text-[10px] font-extrabold text-slate-800 shadow-sm">{file.type}</div>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={file.imageUrl} alt={file.title} className={`w-full h-full object-cover transition-transform duration-500 ${isSelected ? 'scale-105 opacity-90' : 'group-hover:scale-105'}`} />
+                        {/^(JPG|JPEG|PNG|GIF|WEBP)$/i.test(file.type) ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={file.imageUrl} alt={file.title} className={`w-full h-full object-cover transition-transform duration-500 ${isSelected ? 'scale-105 opacity-90' : 'group-hover:scale-105'}`} />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-slate-50">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 text-slate-300">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                            </svg>
+                          </div>
+                        )}
                       </div>
                       <div className="p-3 bg-white">
                         <h4 className={`font-bold text-xs truncate transition-colors ${isSelected ? 'text-blue-700' : 'text-slate-800'}`}>{file.title}</h4>
@@ -689,7 +734,7 @@ export default function PortfolioStorage() {
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 flex-shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
                     อัปโหลดจากคอมพิวเตอร์ของคุณ
                   </button>
-                  <button onClick={() => setIsMediaModalOpen(true)} className="px-6 py-3.5 bg-white text-blue-600 border border-slate-200 hover:bg-slate-50 rounded-full font-bold text-base transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2 w-full sm:w-auto">
+                  <button onClick={openMediaModal} className="px-6 py-3.5 bg-white text-blue-600 border border-slate-200 hover:bg-slate-50 rounded-full font-bold text-base transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2 w-full sm:w-auto">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 flex-shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" /></svg>
                     เลือกจากคลัง
                   </button>
@@ -804,8 +849,17 @@ export default function PortfolioStorage() {
                 )}
                 <div className="aspect-[4/3] bg-slate-100 relative overflow-hidden flex-shrink-0">
                   <div className="absolute top-4 left-4 z-10 bg-white/95 backdrop-blur-sm px-4 py-2 rounded-lg text-xs font-extrabold text-slate-800 shadow-sm flex-shrink-0">{file.file_type}</div>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={file.file_url} alt={file.title} draggable={false} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out flex-shrink-0 pointer-events-none" />
+                  {/^(JPG|JPEG|PNG|GIF|WEBP)$/i.test(file.file_type) ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={file.file_url} alt={file.title} draggable={false} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out flex-shrink-0 pointer-events-none" />
+                  ) : (
+                    <a href={file.file_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="w-full h-full flex flex-col items-center justify-center gap-2 bg-slate-50 hover:bg-blue-50/50 transition-colors">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-10 h-10 text-slate-300">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                      </svg>
+                      <span className="text-[10px] font-extrabold text-slate-400">แตะเพื่อเปิดไฟล์</span>
+                    </a>
+                  )}
                 </div>
                 <div className="p-6 md:p-8 flex flex-col flex-grow flex-shrink-0">
                   <h3 className="font-extrabold text-slate-800 text-xl truncate flex-shrink-0" title={file.title}>{file.title}</h3>

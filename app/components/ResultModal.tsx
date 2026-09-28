@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 
 interface ResultModalProps {
   isOpen: boolean;
@@ -61,11 +61,57 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
   const warnings = analysis?.warnings && analysis.warnings.length > 0 ? analysis.warnings : null;
   const rawInput = analysis?.rawInput?.trim() ? analysis.rawInput.trim() : null;
   const textWarning = analysis?.textWarning?.trim() ? analysis.textWarning.trim() : null;
+  const reportRef = useRef<HTMLDivElement>(null);
+  const [downloading, setDownloading] = useState(false);
+
+  const downloadPdf = async () => {
+    if (!reportRef.current || downloading) return;
+    setDownloading(true);
+    try {
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import('html2canvas-pro'),
+        import('jspdf'),
+      ]);
+      const canvas = await html2canvas(reportRef.current, { scale: 2, backgroundColor: '#ffffff' });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const margin = 10;
+      const imgW = pageW - margin * 2;
+      const imgH = (canvas.height * imgW) / canvas.width;
+      if (imgH <= pageH - margin * 2) {
+        pdf.addImage(imgData, 'PNG', margin, margin, imgW, imgH);
+      } else {
+        // ตัดหลายหน้าตามความสูง A4
+        const pxPerMm = canvas.width / imgW;
+        const pagePx = Math.floor((pageH - margin * 2) * pxPerMm);
+        let done = 0;
+        let first = true;
+        while (done < canvas.height) {
+          const sliceH = Math.min(pagePx, canvas.height - done);
+          const slice = document.createElement('canvas');
+          slice.width = canvas.width;
+          slice.height = sliceH;
+          slice.getContext('2d')?.drawImage(canvas, 0, done, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+          if (!first) pdf.addPage();
+          pdf.addImage(slice.toDataURL('image/png'), 'PNG', margin, margin, imgW, (sliceH * imgW) / canvas.width);
+          done += sliceH;
+          first = false;
+        }
+      }
+      const stamp = new Date().toISOString().slice(0, 10);
+      pdf.save(`ผลวิเคราะห์ทักษะ-${stamp}.pdf`);
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-white w-full max-w-3xl rounded-[2rem] shadow-[0_32px_80px_-24px_rgba(15,23,42,0.3)] overflow-hidden flex flex-col max-h-[95vh] animate-in zoom-in-95 duration-300">
         
+        <div ref={reportRef} className="flex flex-col bg-white">
         {/* Header ของ Modal */}
         <div className="px-6 md:px-8 py-6 border-b border-slate-100 relative bg-white flex-shrink-0">
           <button
@@ -248,17 +294,25 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
           </div>
 
         </div>
+        </div>
 
-        {/* Footer ของ Modal (มีแต่ปุ่มดาวน์โหลด) */}
-        <div className="px-6 md:px-8 py-5 border-t border-slate-100 flex justify-end items-center bg-slate-50/80 flex-shrink-0">
+        {/* Footer ของ Modal */}
+        <div className="px-6 md:px-8 py-5 border-t border-slate-100 flex flex-col sm:flex-row justify-end items-stretch sm:items-center gap-3 bg-slate-50/80 flex-shrink-0">
           <button 
             onClick={onClose} 
-            className="w-full sm:w-auto px-8 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
+            className="w-full sm:w-auto px-8 py-2.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-lg font-bold text-sm transition-all active:scale-95"
+          >
+            ปิด
+          </button>
+          <button 
+            onClick={downloadPdf}
+            disabled={downloading}
+            className="w-full sm:w-auto px-8 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 disabled:opacity-60"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
             </svg>
-            ดาวน์โหลด PDF
+            {downloading ? 'กำลังสร้าง PDF...' : 'ดาวน์โหลด PDF'}
           </button>
         </div>
 

@@ -43,7 +43,7 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
       <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
         <div className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl p-8 text-center">
           <p className="text-base font-extrabold text-slate-800">โหลดผลวิเคราะห์ไม่สำเร็จ</p>
-          <p className="text-xs font-medium text-slate-500 mt-2">ไม่มีผลวิเคราะห์สำหรับไฟล์นี้ ลองวิเคราะห์ใหม่อีกครั้ง</p>
+          <p className="text-xs font-medium text-slate-600 mt-2">ไม่มีผลวิเคราะห์สำหรับไฟล์นี้ ลองวิเคราะห์ใหม่อีกครั้ง</p>
           <button onClick={onClose} className="mt-6 px-8 py-2.5 bg-slate-900 text-white rounded-full font-bold text-sm">ปิด</button>
         </div>
       </div>
@@ -138,7 +138,7 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
             )}
           </div>
           
-          <div className="flex items-center gap-6 text-xs font-medium text-slate-500">
+          <div className="flex items-center gap-6 text-xs font-medium text-slate-600">
             <span className="flex items-center gap-1.5">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
@@ -175,7 +175,7 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
                 </svg>
               </div>
               <div>
-                <p className="text-xs font-extrabold text-slate-500 uppercase tracking-widest">ความสอดคล้องสายงาน</p>
+                <p className="text-xs font-extrabold text-slate-600 uppercase tracking-widest">ความสอดคล้องสายงาน</p>
                 <p className="text-lg font-bold text-slate-700 mt-2 leading-relaxed text-balance">{career}</p>
               </div>
               {!analysis.career && (
@@ -198,7 +198,7 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
                   <div className="w-full bg-slate-200 rounded-full h-2">
                     <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${technical}%` }}></div>
                   </div>
-                  <p className="text-[10px] text-slate-400 mt-1">{analysis.skillNotes?.technical ?? 'ความเชี่ยวชาญการเขียนโค้ดและระบบ'}</p>
+                  <p className="text-[11px] font-medium text-slate-600 mt-1">{analysis.skillNotes?.technical ?? 'ความเชี่ยวชาญการเขียนโค้ดและระบบ'}</p>
                 </div>
 
                 {/* Bar 2 */}
@@ -209,7 +209,7 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
                   <div className="w-full bg-slate-200 rounded-full h-2">
                     <div className="bg-purple-500 h-2 rounded-full" style={{ width: `${soft}%` }}></div>
                   </div>
-                  <p className="text-[10px] text-slate-400 mt-1">{analysis.skillNotes?.soft ?? 'การสื่อสารและการทำงานร่วมกัน'}</p>
+                  <p className="text-[11px] font-medium text-slate-600 mt-1">{analysis.skillNotes?.soft ?? 'การสื่อสารและการทำงานร่วมกัน'}</p>
                 </div>
 
                 {/* Bar 3 */}
@@ -220,7 +220,7 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
                   <div className="w-full bg-slate-200 rounded-full h-2">
                     <div className="bg-indigo-500 h-2 rounded-full" style={{ width: `${management}%` }}></div>
                   </div>
-                  <p className="text-[10px] text-slate-400 mt-1">{analysis.skillNotes?.management ?? 'การส่งมอบงานและการวางแผน'}</p>
+                  <p className="text-[11px] font-medium text-slate-600 mt-1">{analysis.skillNotes?.management ?? 'การส่งมอบงานและการวางแผน'}</p>
                 </div>
               </div>
             </div>
@@ -238,7 +238,7 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
                   <span key={`${skill}-${i}`} className="px-3 py-1.5 text-xs font-bold rounded-md bg-blue-50 text-blue-700 border border-blue-100">{skill}</span>
                 ))
               ) : (
-                <p className="text-xs font-medium text-slate-500">ไม่พบทักษะจากไฟล์ที่ส่ง — ดูรายการไฟล์ที่ AI ไม่นับด้านล่าง</p>
+                <p className="text-xs font-medium text-slate-600">ไม่พบทักษะจากไฟล์ที่ส่ง — ดูรายการไฟล์ที่ AI ไม่นับด้านล่าง</p>
               )}
             </div>
           </div>
@@ -247,7 +247,7 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
           {rawInput && (
             <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5">
               <h4 className="text-sm font-extrabold text-slate-800 mb-2">สิ่งที่คุณพิมพ์บอก AI</h4>
-              <p className="text-xs font-medium text-slate-600 whitespace-pre-line">{rawInput}</p>
+              <p className="text-xs font-medium text-slate-700 whitespace-pre-line">{rawInput}</p>
               {textWarning && (
                 <p className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mt-3">⚠ {textWarning}</p>
               )}
@@ -291,12 +291,12 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
                     </div>
                     <div>
                       <p className="text-sm font-extrabold text-slate-800 mb-0.5">{rec.title}</p>
-                      <p className="text-xs text-slate-500">{rec.detail}</p>
+                      <p className="text-xs text-slate-600">{rec.detail}</p>
                     </div>
                   </div>
                 ))
               ) : (
-                <p className="text-xs font-medium text-slate-500">AI ไม่ได้ให้คำแนะนำสำหรับไฟล์ชุดนี้</p>
+                <p className="text-xs font-medium text-slate-600">AI ไม่ได้ให้คำแนะนำสำหรับไฟล์ชุดนี้</p>
               )}
             </div>
           </div>

@@ -569,6 +569,19 @@ export default function PortfolioStorage() {
   // เพิ่มรูปจากเครื่องสู่คลังโดยตรง (ไม่ผ่านขั้นตอนวิเคราะห์)
   const [galleryError, setGalleryError] = useState<string | null>(null);
 
+  const errText = (err: unknown, fallback: string) => {
+    if (err instanceof Error && err.message) return err.message;
+    if (typeof err === 'object' && err !== null && typeof (err as { message?: unknown }).message === 'string') {
+      return (err as { message: string }).message;
+    }
+    try {
+      const s = JSON.stringify(err);
+      return s && s !== '{}' ? s.slice(0, 300) : fallback;
+    } catch {
+      return fallback;
+    }
+  };
+
   const handleGalleryDirectSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
     const filesArray = Array.from(e.target.files).filter((f) => f.size <= 10 * 1024 * 1024);
@@ -592,7 +605,7 @@ export default function PortfolioStorage() {
         try {
           await uploadPortfolioReal(user.id, f);
         } catch (err) {
-          if (!firstErr) firstErr = err instanceof Error ? err.message : String(err);
+          if (!firstErr) firstErr = errText(err, 'ไม่ทราบสาเหตุ');
           failed++;
         }
       }
@@ -604,7 +617,7 @@ export default function PortfolioStorage() {
       }
       await refreshMyPortfolios();
     } catch (err) {
-      setGalleryError(err instanceof Error ? err.message : 'เพิ่มรูปไม่สำเร็จ ลองใหม่อีกครั้ง');
+      setGalleryError(errText(err, 'เพิ่มรูปไม่สำเร็จ ลองใหม่อีกครั้ง'));
     } finally {
       setGallerySaving(false);
       if (galleryFileInputRef.current) galleryFileInputRef.current.value = '';

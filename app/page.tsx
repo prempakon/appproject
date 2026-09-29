@@ -56,10 +56,9 @@ function LoginForm() {
             role = (profile.role as 'admin' | 'student') ?? role;
             name = profile.name;
             avatar = profile.avatar_url ?? undefined;
-            // ผู้ใช้ครั้งแรก (โปรไฟล์เพิ่งสร้าง + ยังไม่มีสาขา) ส่งไปหน้าสมัครผูกเมล
-            const createdAt = (profile as { created_at?: string }).created_at;
+            // ยังไม่เคยกรอกข้อมูล (ไม่มีสาขา) ส่งไปหน้าสมัครผูกเมล
             const major = (profile as { major?: string }).major;
-            if (createdAt && Date.now() - new Date(createdAt).getTime() < 120_000 && (!major || major === '-')) {
+            if (!major || major === '-') {
               toSetup = true;
             }
           }

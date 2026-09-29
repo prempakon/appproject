@@ -50,11 +50,9 @@ export async function GET(request: Request) {
         if (dbRole === 'admin') {
           return NextResponse.redirect(`${origin}/admin`);
         }
-        // ผู้ใช้ครั้งแรก (สมัครผ่าน Google เมื่อกี้นี้) ส่งไปหน้าสมัครพร้อมผูกอีเมล
-        const createdAt = (profile as { created_at?: string } | null)?.created_at;
+        // ผู้ใช้ที่ยังกรอกข้อมูลไม่ครบ (ไม่มีสาขา) ส่งไปหน้าสมัครผูกเมล ไม่ว่าจะสมัครเมื่อไหร่
         const major = (profile as { major?: string } | null)?.major;
-        const isFresh =
-          !!createdAt && Date.now() - new Date(createdAt).getTime() < 120_000 && (!major || major === '-');
+        const isFresh = !major || major === '-';
         if (isFresh) {
           return NextResponse.redirect(
             `${origin}/setup?email=${encodeURIComponent(user.email)}&oauth=1`,

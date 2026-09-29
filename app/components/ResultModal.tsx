@@ -266,7 +266,7 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
           {rawInput && (
             <section>
               <h4 className="text-sm font-extrabold text-slate-800 mb-4">ข้อมูลประกอบการวิเคราะห์</h4>
-              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-[0_2px_12px_rgba(15,23,42,0.05)]">
+              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5">
               <p className="text-xs font-medium text-slate-700 whitespace-pre-line">{rawInput}</p>
               {textWarning && (
                 <p className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mt-3">⚠ {textWarning}</p>

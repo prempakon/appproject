@@ -92,7 +92,10 @@ export default function AdminDashboard() {
         const { listProfilesForAdmin } = await import('../../lib/profiles');
         const { profiles, portfolios, analyses } = await listProfilesForAdmin();
         setAnalyzedIds(analyses.map((a) => a.portfolio_id));
-        const mapped: StudentRow[] = profiles.map((p) => {
+        // แอดมินไม่ใช่ข้อมูลนักศึกษา กรองออกจากตาราง
+        const mapped: StudentRow[] = profiles
+          .filter((p) => p.role !== 'admin')
+          .map((p) => {
           const files = portfolios.filter((f) => f.user_id === p.id);
           const userAnalyses = analyses.filter((a) => a.user_id === p.id);
           const latest = userAnalyses[0] ?? null;

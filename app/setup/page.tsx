@@ -28,7 +28,7 @@ function SetupForm() {
     password: '',
     firstName: '',
     lastName: '',
-    institution: 'มหาวิทยาลัยราชภัฏเลย',
+    institution: '',
     major: '',
   });
 
@@ -288,6 +288,7 @@ function SetupForm() {
               <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider">มหาวิทยาลัย / สถานศึกษา</label>
               <input 
                 type="text" name="institution" value={formData.institution} onChange={handleChange}
+                placeholder="เช่น มหาวิทยาลัยราชภัฏเลย"
                 className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none text-sm text-slate-800 transition-all font-medium"
                 required
               />

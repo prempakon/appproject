@@ -79,9 +79,14 @@ function LoginForm() {
           else return;
         }
         if (cancelled) return;
-        saveLocalSession(cleanEmail, role, name, avatar);
+        const goSetup = toSetup && role !== 'admin';
+        // ยังไม่กดยืนยันห้ามบันทึกอะไรทั้งนั้น (local ก็ไม่เขียน)
+        // เขียน local ต่อเมื่อจะพาเข้าแอปจริงเท่านั้น
+        if (!goSetup) {
+          saveLocalSession(cleanEmail, role, name, avatar);
+        }
         window.history.replaceState(null, '', '/');
-        if (toSetup && role !== 'admin') {
+        if (goSetup) {
           router.push(`/setup?email=${encodeURIComponent(cleanEmail)}&oauth=1`);
         } else {
           router.push(role === 'admin' ? '/admin' : '/main');

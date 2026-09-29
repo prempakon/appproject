@@ -65,7 +65,7 @@ export default function PortfolioStorage() {
   const galleryFileInputRef = useRef<HTMLInputElement>(null);
   const [gallerySaving, setGallerySaving] = useState(false);
 
-  const [userProfile] = useState<UserProfile>(() => {
+  const [userProfile, setUserProfile] = useState<UserProfile>(() => {
     const fallback = { name: 'User', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150' };
     try {
       const saved = typeof window === 'undefined' ? null : localStorage.getItem('userProfile');
@@ -117,10 +117,26 @@ export default function PortfolioStorage() {
   const refreshMyPortfolios = async () => {
     try {
       const { getSessionUser } = await import('../../lib/auth');
-      const { listMyPortfolios, listMyAnalyses } = await import('../../lib/profiles');
+      const { listMyPortfolios, listMyAnalyses, getMyProfile } = await import('../../lib/profiles');
       const user = await getSessionUser();
       if (!user) return;
       setMyPortfolios(await listMyPortfolios(user.id));
+      // โปรไฟล์เอาจาก DB เป็นหลัก (local เป็นแค่สำรอง)
+      try {
+        const db = await getMyProfile(user.id);
+        if (db) {
+          setUserProfile((prev) => ({
+            ...prev,
+            name: db.name || prev.name,
+            avatar: db.avatar_url || prev.avatar,
+            institution: db.institution || prev.institution,
+            major: db.major || prev.major,
+            bio: (db as { bio?: string }).bio || prev.bio,
+          }));
+        }
+      } catch {
+        // เงียบไว้ ใช้ local ต่อ
+      }
       const analyses = await listMyAnalyses(user.id);
       setMyHistory(analyses.map((a) => ({
         id: a.id,

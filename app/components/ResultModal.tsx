@@ -158,7 +158,7 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
         <div className="p-6 md:p-8 overflow-y-auto flex-grow space-y-8 bg-white custom-scrollbar">
           {lowConfidence && (
             <p className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-              ⚠ AI ยังไม่มั่นใจผลนี้ — หลักฐานน้อยหรือคลุมเครือ อัปโหลดใบเซอร์ ทรานสคริปต์ หรืองานที่ชัดขึ้นแล้ววิเคราะห์ใหม่
+              ⚠ ผลวิเคราะห์นี้เป็นเพียงการประเมินเบื้องต้น อาจไม่แม่นยำ 100% — หลักฐานยังน้อยหรือคลุมเครือ ลองอัปโหลดใบเซอร์ ทรานสคริปต์ หรืองานที่ชัดขึ้นแล้ววิเคราะห์ใหม่
               {modelName?.includes('lite') ? ' (ครั้งนี้โมเดลหลักไม่ว่าง ใช้รุ่นสำรองตอบ ผลอาจละเอียดน้อยกว่า)' : ''}
             </p>
           )}

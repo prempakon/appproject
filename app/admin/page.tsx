@@ -474,7 +474,7 @@ export default function AdminDashboard() {
                   <div className="space-y-3">
                     {viewing.latestAnalysis.accuracy < 30 && (
                       <p className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-                        ⚠ AI ยังไม่มั่นใจผลนี้ — หลักฐานน้อยหรือคลุมเครือ
+                        ⚠ ผลนี้เป็นการประเมินเบื้องต้น อาจไม่แม่นยำ 100% — หลักฐานน้อยหรือคลุมเครือ
                       </p>
                     )}
                     <div className="flex items-center gap-3">

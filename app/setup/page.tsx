@@ -107,6 +107,12 @@ function SetupForm() {
         const { upsertMyProfile } = await import('../../lib/profiles');
         const user = await getSessionUser();
         if (!user) throw new Error('เซสชัน Google หมดอายุ กดปุ่ม Google ใหม่อีกครั้ง');
+        // ตั้งรหัสผ่านเพิ่มถ้ากรอกมา (จะได้เข้าด้วยอีเมล+รหัสผ่านได้ด้วย)
+        if (formData.password.trim()) {
+          const { supabase } = await import('../../lib/supabaseClient');
+          const { error: pwErr } = await supabase.auth.updateUser({ password: formData.password });
+          if (pwErr) throw pwErr;
+        }
         let avatarUrl: string | null = null;
         if (avatarFile) {
           try {
@@ -232,6 +238,24 @@ function SetupForm() {
             </div>
             )}
           </div>
+
+          {/* ตั้งรหัสผ่านเพิ่มสำหรับบัญชี Google (ไม่บังคับ) */}
+          {isOAuth && (
+            <div className="space-y-1.5">
+              <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider">ตั้งรหัสผ่านเพิ่ม (ไม่บังคับ)</label>
+              <div className="relative">
+                <input 
+                  type={showPassword ? "text" : "password"} name="password" value={formData.password} onChange={handleChange}
+                  placeholder="เผื่ออยากเข้าสู่ระบบด้วยอีเมล+รหัสผ่านด้วย" 
+                  className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none text-sm text-slate-800 transition-all font-medium pr-10"
+                />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-slate-600">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                </button>
+              </div>
+              <p className="text-[11px] font-medium text-slate-400">เว้นว่างไว้ได้ถ้าจะเข้าด้วย Google อย่างเดียว</p>
+            </div>
+          )}
 
           {/* ช่องกรอกชื่อ และ นามสกุล */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

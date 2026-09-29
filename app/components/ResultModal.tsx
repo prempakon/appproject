@@ -167,27 +167,16 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             
             {/* สายงาน */}
-            <div className="col-span-1 border border-slate-100 rounded-2xl p-6 flex flex-col items-center justify-center bg-gradient-to-b from-blue-50/70 to-white text-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-600/25">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+            <div className="col-span-1 border border-slate-100 rounded-2xl p-8 flex flex-col items-center justify-center bg-gradient-to-b from-blue-50/80 via-white to-white text-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-600/25">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-7 h-7">
                   <path fillRule="evenodd" d="M7.5 5.25a3 3 0 013-3h3a3 3 0 013 3v.205c.933.085 1.857.197 2.774.334 1.454.218 2.476 1.483 2.476 2.917v3.033c0 1.211-.734 2.352-1.936 2.752-1.131.378-2.336.378-3.467 0-1.202-.4-1.936-1.541-1.936-2.752v-.747a8.51 8.51 0 01-3.423 0v.747c0 1.211-.734 2.352-1.936 2.752-1.131.378-2.336.378-3.467 0-1.202-.4-1.936-1.541-1.936-2.752V8.706c0-1.434 1.022-2.7 2.476-2.917A48.716 48.716 0 017.5 5.455V5.25zm3 0a.75.75 0 01.75-.75h3a.75.75 0 01.75.75v.205a48.34 48.34 0 00-4.5 0V5.25z" clipRule="evenodd" />
                   <path d="M3 15.75v-2.25c0-.99.56-1.897 1.448-2.34l.827-.413a.75.75 0 011.342.342V15a3 3 0 013 3h3a3 3 0 013-3v-3.66a.75.75 0 011.342-.342l.827.413c.888.443 1.448 1.35 1.448 2.34v2.25a2.25 2.25 0 01-2.25 2.25h-11.5a2.25 2.25 0 01-2.25-2.25z" />
                 </svg>
               </div>
               <div>
-                <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wide">ความสอดคล้องสายงาน</p>
-                <p className="text-lg font-extrabold text-slate-800 mt-1 leading-snug">{career}</p>
-              </div>
-              <div className="flex items-center gap-4 text-center">
-                <div>
-                  <p className="text-xl font-extrabold text-blue-600">{skills.length}</p>
-                  <p className="text-[10px] font-bold text-slate-400">ทักษะที่พบ</p>
-                </div>
-                <div className="w-px h-8 bg-slate-200"></div>
-                <div>
-                  <p className="text-xl font-extrabold text-blue-600">{files.length}</p>
-                  <p className="text-[10px] font-bold text-slate-400">ไฟล์ที่วิเคราะห์</p>
-                </div>
+                <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-widest">ความสอดคล้องสายงาน</p>
+                <p className="text-xl font-extrabold text-slate-800 mt-2 leading-snug">{career}</p>
               </div>
               {!analysis.career && (
                 <p className="text-[11px] text-slate-400 leading-relaxed">

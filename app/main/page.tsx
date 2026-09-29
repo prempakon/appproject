@@ -52,6 +52,7 @@ export default function PortfolioStorage() {
   const [selectedExistingIds, setSelectedExistingIds] = useState<(string | null)[]>([]);
   const [resultDate, setResultDate] = useState<string | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [batchProgress, setBatchProgress] = useState<string | null>(null);
   const [showResultModal, setShowResultModal] = useState(false);
   const [isHistoryDropdownOpen, setIsHistoryDropdownOpen] = useState(false);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
@@ -190,6 +191,7 @@ export default function PortfolioStorage() {
     setUploadStatus('processing');
     setAiResult(null);
     setAnalysisError(null);
+    setBatchProgress(null);
     // 1) เรียก Gemini วิเคราะห์ (ไฟล์จริง + ข้อความอาชีพที่สนใจ)
     let ai: {
       skills: string[];
@@ -244,45 +246,92 @@ export default function PortfolioStorage() {
     };
 
     try {
-      const form = new FormData();
-      form.append('interestText', additionalSkillsText);
-      form.append('major', userProfile.major || '');
-      form.append('institution', userProfile.institution || '');
-      for (const f of selectedFiles) {
-        if (f.size <= 0) continue;
-        form.append('files', await downscaleImage(f), f.name);
+      // แบ่งส่งทีละไม่เกิน 5 ไฟล์/รอบ (เลี่ยงลิมิต body ~4.5MB) แล้วรวมผล — รองรับสูงสุด 10 รูป
+      const analyzable = selectedFiles.filter((f) => f.size > 0).slice(0, 10);
+      const chunks: File[][] = [];
+      for (let i = 0; i < analyzable.length; i += 5) chunks.push(analyzable.slice(i, i + 5));
+      const batchResults: {
+        skills: string[];
+        career: string | null;
+        careerEn: string | null;
+        accuracy: number;
+        technical: number;
+        soft: number;
+        management: number;
+        recommendations: { title: string; detail: string }[];
+        warnings: string[];
+        textWarning: string | null;
+        skillNotes: { technical: string | null; soft: string | null; management: string | null };
+        model: string | null;
+      }[] = [];
+      for (const [ci, chunk] of chunks.entries()) {
+        if (chunks.length > 1) setBatchProgress(`กำลังวิเคราะห์รอบที่ ${ci + 1}/${chunks.length}...`);
+        const form = new FormData();
+        // ส่งข้อความบริบทเฉพาะรอบแรก (กัน AI นับซ้ำ)
+        form.append('interestText', ci === 0 ? additionalSkillsText : '');
+        form.append('major', ci === 0 ? userProfile.major || '' : '');
+        form.append('institution', ci === 0 ? userProfile.institution || '' : '');
+        for (const f of chunk) {
+          form.append('files', await downscaleImage(f), f.name);
+        }
+        const res = await fetch('/api/analyze', { method: 'POST', body: form });
+        if (res.status === 413) {
+          throw new Error('ไฟล์รวมใหญ่เกินไป ลองลดจำนวนไฟล์ต่อรอบแล้วลองใหม่');
+        }
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({})) as { error?: string; detail?: string };
+          if (errBody.detail) console.error('AI analyze detail:', errBody.detail);
+          throw new Error(errBody.error || `AI วิเคราะห์ไม่สำเร็จ (HTTP ${res.status})`);
+        }
+        const data = await res.json();
+        if (!Array.isArray(data.skills)) {
+          throw new Error('AI ตอบกลับไม่ถูกต้อง ลองใหม่อีกครั้ง');
+        }
+        batchResults.push({
+          skills: data.skills,
+          career: data.career ?? null,
+          careerEn: typeof data.careerEn === 'string' ? data.careerEn : null,
+          accuracy: data.accuracy ?? 0,
+          technical: data.technical ?? 0,
+          soft: data.soft ?? 0,
+          management: data.management ?? 0,
+          recommendations: Array.isArray(data.recommendations) ? data.recommendations : [],
+          warnings: Array.isArray(data.warnings) ? data.warnings : [],
+          textWarning: typeof data.textWarning === 'string' ? data.textWarning : null,
+          skillNotes: {
+            technical: typeof data.skillNotes?.technical === 'string' ? data.skillNotes.technical : null,
+            soft: typeof data.skillNotes?.soft === 'string' ? data.skillNotes.soft : null,
+            management: typeof data.skillNotes?.management === 'string' ? data.skillNotes.management : null,
+          },
+          model: typeof data._model === 'string' ? data._model : null,
+        });
       }
-      const res = await fetch('/api/analyze', { method: 'POST', body: form });
-      if (res.status === 413) {
-        throw new Error('ไฟล์รวมใหญ่เกินไป (เกิน ~4MB) ลดจำนวนไฟล์ต่อรอบ (ไม่เกิน 3 ไฟล์) แล้วลองใหม่');
-      }
-      if (!res.ok) {
-        const errBody = await res.json().catch(() => ({})) as { error?: string; detail?: string };
-        if (errBody.detail) console.error('AI analyze detail:', errBody.detail);
-        throw new Error(errBody.error || `AI วิเคราะห์ไม่สำเร็จ (HTTP ${res.status})`);
-      }
-      const data = await res.json();
-      if (!Array.isArray(data.skills)) {
-        throw new Error('AI ตอบกลับไม่ถูกต้อง ลองใหม่อีกครั้ง');
-      }
+      // รวมผลทุกรอบ: ทักษะ union, คะแนนเฉลี่ย, คำแนะนำ/คำเตือนต่อกัน
+      const avg = (nums: number[]) => (nums.length > 0 ? Math.round(nums.reduce((a, b) => a + b, 0) / nums.length) : 0);
+      const skillSeen = new Set<string>();
       ai = {
-        skills: data.skills,
-        career: data.career ?? null,
-        careerEn: typeof data.careerEn === 'string' ? data.careerEn : null,
-        accuracy: data.accuracy ?? 0,
-        technical: data.technical ?? 0,
-        soft: data.soft ?? 0,
-        management: data.management ?? 0,
-        recommendations: Array.isArray(data.recommendations) ? data.recommendations : [],
-        warnings: Array.isArray(data.warnings) ? data.warnings : [],
+        skills: batchResults.flatMap((r) => r.skills).filter((s) => {
+          const k = s.trim().toLowerCase();
+          if (!k || skillSeen.has(k)) return false;
+          skillSeen.add(k);
+          return true;
+        }).slice(0, 12),
+        career: batchResults.map((r) => r.career).find((c) => !!c) ?? null,
+        careerEn: batchResults.map((r) => r.careerEn).find((c) => !!c) ?? null,
+        accuracy: avg(batchResults.map((r) => r.accuracy)),
+        technical: avg(batchResults.map((r) => r.technical)),
+        soft: avg(batchResults.map((r) => r.soft)),
+        management: avg(batchResults.map((r) => r.management)),
+        recommendations: batchResults.flatMap((r) => r.recommendations).slice(0, 4),
+        warnings: batchResults.flatMap((r) => r.warnings).slice(0, 6),
         rawInput: additionalSkillsText.trim() ? additionalSkillsText.trim() : null,
-        textWarning: typeof data.textWarning === 'string' ? data.textWarning : null,
+        textWarning: batchResults.map((r) => r.textWarning).find((t) => !!t) ?? null,
         skillNotes: {
-          technical: typeof data.skillNotes?.technical === 'string' ? data.skillNotes.technical : null,
-          soft: typeof data.skillNotes?.soft === 'string' ? data.skillNotes.soft : null,
-          management: typeof data.skillNotes?.management === 'string' ? data.skillNotes.management : null,
+          technical: batchResults.map((r) => r.skillNotes.technical).find((t) => !!t) ?? null,
+          soft: batchResults.map((r) => r.skillNotes.soft).find((t) => !!t) ?? null,
+          management: batchResults.map((r) => r.skillNotes.management).find((t) => !!t) ?? null,
         },
-        model: typeof data._model === 'string' ? data._model : null,
+        model: batchResults.map((r) => r.model).find((m) => !!m) ?? null,
       };
       setAiResult(ai);
     } catch (err) {
@@ -568,6 +617,7 @@ export default function PortfolioStorage() {
     setSelectedExistingIds([]);
     setResultDate(null);
     setAnalysisError(null);
+    setBatchProgress(null);
     setAiResult(null);
     setAdditionalSkillsText('');
     setUploadStatus('idle');
@@ -859,6 +909,7 @@ export default function PortfolioStorage() {
               <div className="flex flex-col items-center animate-in fade-in zoom-in duration-500 overflow-hidden flex-shrink-0 w-full py-6">
                 <div className="w-16 h-16 border-4 border-slate-100 border-t-blue-600 rounded-full animate-spin mb-6"></div>
                 <h3 className="text-xl md:text-2xl font-extrabold text-slate-800 mb-2 text-center flex-shrink-0">AI กำลังวิเคราะห์เอกสาร {selectedFiles.length} รายการ...</h3>
+                {batchProgress && <p className="text-sm font-bold text-blue-600 text-center">{batchProgress}</p>}
               </div>
             )}
 

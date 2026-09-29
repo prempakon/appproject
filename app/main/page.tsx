@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import ResultModal from '../components/ResultModal'; 
 
 type UserProfile = {
@@ -43,6 +44,7 @@ type HistoryItem = {
 };
 
 export default function PortfolioStorage() {
+  const router = useRouter();
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'preview' | 'processing' | 'success'>('idle');
@@ -148,10 +150,22 @@ export default function PortfolioStorage() {
   };
 
   useEffect(() => {
+    // การ์ดหน้าแรก: ไม่มี session จริงและไม่มี local เดิม กลับไปล็อกอิน
+    (async () => {
+      try {
+        const { getSessionUser } = await import('../../lib/auth');
+        const user = await getSessionUser();
+        if (!user && !localStorage.getItem('userEmail')) {
+          router.push('/');
+        }
+      } catch {
+        if (!localStorage.getItem('userEmail')) router.push('/');
+      }
+    })();
     // โหลดข้อมูลคลังครั้งแรกจาก DB (async fetch คือ external sync ที่ถูกต้องใน effect)
     // eslint-disable-next-line react-hooks/set-state-in-effect
     refreshMyPortfolios();
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

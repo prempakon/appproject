@@ -1,25 +1,64 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { signUpReal } from '../../lib/auth';
 import { uploadAvatarReal } from '../../lib/storage';
 import { resolveRole } from '../../lib/database.types';
 
 export default function SetupPage() {
+  return (
+    <Suspense>
+      <SetupForm />
+    </Suspense>
+  );
+}
+
+function SetupForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const oauthEmail = searchParams.get('email') ?? '';
+  const isOAuth = searchParams.get('oauth') === '1' && !!oauthEmail;
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [authError, setAuthError] = useState('');
   
   const [formData, setFormData] = useState({
-    email: '',
+    email: oauthEmail.toLowerCase(),
     password: '',
     firstName: '',
     lastName: '',
     institution: 'มหาวิทยาลัยราชภัฏเลย',
     major: '',
   });
+
+  // โหมด OAuth: ดึงชื่อจากโปรไฟล์ Google ที่ callback สร้างไว้มากรอกให้
+  useEffect(() => {
+    if (!isOAuth) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { getSessionUser } = await import('../../lib/auth');
+        const { getMyProfile } = await import('../../lib/profiles');
+        const user = await getSessionUser();
+        if (!user || cancelled) return;
+        const profile = await getMyProfile(user.id);
+        if (!profile || cancelled) return;
+        const parts = (profile.name || '').trim().split(/\s+/);
+        setFormData((prev) => ({
+          ...prev,
+          email: profile.email || prev.email,
+          firstName: parts.slice(0, -1).join(' ') || parts[0] || '',
+          lastName: parts.length > 1 ? parts[parts.length - 1] : '',
+        }));
+      } catch {
+        // เงียบไว้ กรอกเองได้
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOAuth]);
 
   const [previewAvatar, setPreviewAvatar] = useState('https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150');
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -57,28 +96,58 @@ export default function SetupPage() {
     localStorage.setItem('userEmail', formData.email);
 
     try {
-      // ทางจริง: Supabase Auth + profiles
-      const { user } = await signUpReal(cleanEmail, formData.password, {
-        name: fullName || 'นักศึกษาใหม่',
-        institution: formData.institution,
-        major: formData.major,
-        avatar_url: null,
-      });
-      // อัปโหลดรูปจริงถ้าเลือกไฟล์ (ไม่บังคับ — พังก็ใช้ preview เดิม)
-      if (user && avatarFile) {
-        try {
-          const publicUrl = await uploadAvatarReal(user.id, avatarFile);
-          const { supabase } = await import('../../lib/supabaseClient');
-          await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id);
-          localStorage.setItem('userProfile', JSON.stringify({
-            name: fullName || 'นักศึกษาใหม่',
-            avatar: publicUrl,
-            institution: formData.institution,
-            major: formData.major,
-            email: formData.email
-          }));
-        } catch {
-          // เงียบไว้ ใช้ local preview ต่อได้
+      if (isOAuth) {
+        // โหมด Google: มีบัญชี Auth แล้ว แค่อัปเดตโปรไฟล์ให้สมบูรณ์ (ไม่สมัครรหัสผ่าน)
+        const { getSessionUser } = await import('../../lib/auth');
+        const { upsertMyProfile } = await import('../../lib/profiles');
+        const user = await getSessionUser();
+        if (!user) throw new Error('เซสชัน Google หมดอายุ กดปุ่ม Google ใหม่อีกครั้ง');
+        let avatarUrl: string | null = null;
+        if (avatarFile) {
+          try {
+            avatarUrl = await uploadAvatarReal(user.id, avatarFile);
+          } catch {
+            // เงียบไว้ ใช้รูปเดิม
+          }
+        }
+        const saved = await upsertMyProfile(user.id, {
+          email: cleanEmail,
+          name: fullName || 'นักศึกษาใหม่',
+          institution: formData.institution,
+          major: formData.major,
+          avatar_url: avatarUrl,
+        });
+        localStorage.setItem('userProfile', JSON.stringify({
+          name: saved.name,
+          avatar: saved.avatar_url || previewAvatar,
+          institution: saved.institution,
+          major: saved.major,
+          email: saved.email
+        }));
+      } else {
+        // ทางจริง: Supabase Auth + profiles
+        const { user } = await signUpReal(cleanEmail, formData.password, {
+          name: fullName || 'นักศึกษาใหม่',
+          institution: formData.institution,
+          major: formData.major,
+          avatar_url: null,
+        });
+        // อัปโหลดรูปจริงถ้าเลือกไฟล์ (ไม่บังคับ — พังก็ใช้ preview เดิม)
+        if (user && avatarFile) {
+          try {
+            const publicUrl = await uploadAvatarReal(user.id, avatarFile);
+            const { supabase } = await import('../../lib/supabaseClient');
+            await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id);
+            localStorage.setItem('userProfile', JSON.stringify({
+              name: fullName || 'นักศึกษาใหม่',
+              avatar: publicUrl,
+              institution: formData.institution,
+              major: formData.major,
+              email: formData.email
+            }));
+          } catch {
+            // เงียบไว้ ใช้ local preview ต่อได้
+          }
         }
       }
     } catch (err: unknown) {
@@ -101,8 +170,14 @@ export default function SetupPage() {
       <div className="bg-white w-full max-w-xl rounded-[2.5rem] shadow-[0_24px_70px_-24px_rgba(30,64,175,0.22)] p-8 sm:p-10 animate-in slide-in-from-bottom-4 duration-500 border border-slate-200/70">
         
         <div className="text-center mb-8">
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight">สมัครสมาชิกใหม่</h2>
-          <p className="text-sm text-slate-500 mt-1.5">กรอกอีเมล รหัสผ่าน และข้อมูลส่วนตัวเพื่อสร้างบัญชีระบบ Portfolio</p>
+          <h2 className="text-3xl font-black text-slate-900 tracking-tight">
+            {isOAuth ? 'กรอกข้อมูลให้ครบ' : 'สมัครสมาชิกใหม่'}
+          </h2>
+          <p className="text-sm text-slate-500 mt-1.5">
+            {isOAuth
+              ? `เชื่อม Google สำเร็จ (${formData.email || oauthEmail}) กรอกข้อมูลส่วนตัวเพื่อเริ่มใช้งาน`
+              : 'กรอกอีเมล รหัสผ่าน และข้อมูลส่วนตัวเพื่อสร้างบัญชีระบบ Portfolio'}
+          </p>
         </div>
 
         <form onSubmit={handleRegister} className="space-y-5">
@@ -123,17 +198,19 @@ export default function SetupPage() {
           </div>
 
           {/* ช่องกรอกอีเมล และ รหัสผ่าน */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className={`grid grid-cols-1 ${isOAuth ? '' : 'sm:grid-cols-2'} gap-4`}>
             <div className="space-y-1.5">
               <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider">อีเมล</label>
               <input 
                 type="email" name="email" value={formData.email} onChange={handleChange}
                 placeholder="student@lru.ac.th" 
-                className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none text-sm text-slate-800 transition-all font-medium"
+                readOnly={isOAuth}
+                className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none text-sm text-slate-800 transition-all font-medium disabled:opacity-70"
                 required
               />
             </div>
 
+            {!isOAuth && (
             <div className="space-y-1.5">
               <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider">รหัสผ่าน</label>
               <div className="relative">
@@ -148,6 +225,7 @@ export default function SetupPage() {
                 </button>
               </div>
             </div>
+            )}
           </div>
 
           {/* ช่องกรอกชื่อ และ นามสกุล */}
@@ -197,7 +275,7 @@ export default function SetupPage() {
 
           <div className="pt-2">
             <button type="submit" disabled={busy} className="w-full bg-[#1c58f6] hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-blue-500/25 active:scale-[0.99] text-sm disabled:opacity-60">
-              {busy ? 'กำลังสมัครสมาชิก...' : 'ลงทะเบียนและเข้าสู่ระบบ'}
+              {busy ? (isOAuth ? 'กำลังบันทึกข้อมูล...' : 'กำลังสมัครสมาชิก...') : (isOAuth ? 'บันทึกข้อมูลและเข้าสู่ระบบ' : 'ลงทะเบียนและเข้าสู่ระบบ')}
             </button>
             {authError && <p className="text-xs font-bold text-red-500 text-center mt-2">{authError}</p>}
           </div>

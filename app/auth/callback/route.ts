@@ -65,5 +65,7 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.redirect(`${origin}/?error=oauth`);
+  // หมายเหตุ: ห้ามใช้ query key ชื่อ error/error_description/error_code
+  // เพราะ supabase-js จะเข้าใจว่าเป็น OAuth ล้มเหลวแล้วทิ้ง access_token ใน URL
+  return NextResponse.redirect(`${origin}/?oauth=failed`);
 }

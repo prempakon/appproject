@@ -792,7 +792,7 @@ export default function PortfolioStorage() {
                 <div className={`w-16 h-16 flex items-center justify-center rounded-full mb-6 transition-all duration-300 flex-shrink-0 ${isDragging ? 'bg-blue-600 text-white animate-pulse' : 'bg-slate-50 text-blue-600'}`}>
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-8 h-8 flex-shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z" /></svg>
                 </div>
-                <h3 className="text-3xl md:text-4xl font-extrabold text-slate-800 mb-2 text-center flex-shrink-0">นำเข้าผลงานของคุณ</h3>
+                <h3 className="text-3xl md:text-4xl font-extrabold text-slate-800 mb-2 text-center flex-shrink-0">นำเข้าผลงานของคุณเพื่อวิเคราะห์ทักษะ</h3>
                 <p className="text-base text-slate-500 mb-8 text-center flex-shrink-0">{isDragging ? 'ปล่อยเมาส์เพื่ออัปโหลดไฟล์เลย!' : 'ลากไฟล์มาวางที่นี่ หรือเลือกวิธีนำเข้าด้านล่าง'}</p>
 
                 <div className="flex flex-col sm:flex-row justify-center gap-4 w-full">

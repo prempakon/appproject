@@ -315,10 +315,24 @@ function SetupForm() {
           <div className="text-center pt-2">
             <button 
               type="button" 
-              onClick={() => router.push('/')} 
+              onClick={async () => {
+                // โหมด OAuth: ออกจาก session ก่อนกลับ ไม่งั้นเด้งกลับมาหน้านี้อีก
+                if (isOAuth) {
+                  try {
+                    const { signOutReal } = await import('../../lib/auth');
+                    await signOutReal();
+                  } catch {
+                    // ออกแบบ local ได้แม้เซิร์ฟเวอร์พัง
+                  }
+                  localStorage.removeItem('userRole');
+                  localStorage.removeItem('userEmail');
+                  localStorage.removeItem('userProfile');
+                }
+                router.push('/');
+              }} 
               className="text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors"
             >
-              มีบัญชีอยู่แล้ว? เข้าสู่ระบบ
+              {isOAuth ? '← ยกเลิก กลับหน้าเข้าสู่ระบบ' : 'มีบัญชีอยู่แล้ว? เข้าสู่ระบบ'}
             </button>
           </div>
           

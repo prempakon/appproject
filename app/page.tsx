@@ -38,6 +38,7 @@ function LoginForm() {
   };
 
   // รองรับ implicit flow: ถ้า Supabase คืน session มาทาง URL hash ให้เก็บเข้าระบบเลย
+  // หน้า / คือบ้านหลัก: เปิดเว็บเฉยๆ ไม่เด้งไปไหนเอง จะพาไปต่อเฉพาะตอนเพิ่งกลับจาก Google
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -46,8 +47,8 @@ function LoginForm() {
         if (!user || cancelled) return;
         const cleanEmail = (user.email ?? '').toLowerCase();
         if (!cleanEmail) return;
-        // เพิ่งกลับจาก Google (มี token/code ใน URL) = ต้องตัดสินให้เด็ดขาด ห้ามเงียบ
-        const isOAuthReturn = /[?#].*(access_token|code=)/.test(window.location.href);
+        const href = window.location.href;
+        const isOAuthReturn = /[?#].*(access_token|code=)/.test(href);
         let role: 'admin' | 'student' = resolveRole(cleanEmail);
         let name: string | undefined;
         let avatar: string | undefined;
@@ -55,8 +56,9 @@ function LoginForm() {
         try {
           const profile = await getMyProfile(user.id);
           if (!profile) {
-            // implicit flow ครั้งแรก: ยังไม่มีแถวโปรไฟล์ ส่งไปหน้าสมัคร
-            // (สร้างแถวจริงตอนกดบันทึกใน setup เท่านั้น ไม่สร้างล่วงหน้า)
+            // ยังไม่มีแถวโปรไฟล์: ถ้าเพิ่งกลับจาก Google ส่งไปหน้าสมัคร
+            // ถ้าแค่เปิดเว็บเอง อยู่หน้า login เฉยๆ ไม่เด้ง (กันลูปปุ่ม back)
+            if (!isOAuthReturn) return;
             toSetup = true;
           } else {
             role = (profile.role as 'admin' | 'student') ?? role;
@@ -64,14 +66,17 @@ function LoginForm() {
             avatar = profile.avatar_url ?? undefined;
             // ยังไม่เคยกรอกข้อมูล (ไม่มีสาขา) ส่งไปหน้าสมัครผูกเมล
             const major = (profile as { major?: string }).major;
-            if (!major || major === '-') {
+            if ((!major || major === '-') && isOAuthReturn) {
               toSetup = true;
+            } else if (!major || major === '-') {
+              // เปิดเว็บเองแต่ข้อมูลไม่ครบ: อยู่หน้า login ให้กดทางเข้าต่อเอง
+              return;
             }
           }
         } catch {
-          // อ่าน/สร้างโปรไฟล์ไม่สำเร็จ: ถ้าเพิ่งกลับจาก Google ให้ไปหน้าสมัครไว้ก่อน
-          // ดีกว่าปล่อยเข้า main ทั้งที่ไม่มีข้อมูล
+          // อ่านโปรไฟล์ไม่สำเร็จ: เป็น OAuth return ค่อยไป setup ไม่งั้นอยู่เฉยๆ
           if (isOAuthReturn) toSetup = true;
+          else return;
         }
         if (cancelled) return;
         saveLocalSession(cleanEmail, role, name, avatar);

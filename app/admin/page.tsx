@@ -252,6 +252,24 @@ export default function AdminDashboard() {
           <div className="flex items-center gap-3">
             <span className="hidden sm:block text-sm font-bold text-slate-600">ผู้ดูแลระบบ</span>
             <div className="w-9 h-9 rounded-full bg-slate-900 text-white font-black flex items-center justify-center">A</div>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const { signOutReal } = await import('../../lib/auth');
+                  await signOutReal();
+                } catch {
+                  // ออกแบบ local ได้แม้เซิร์ฟเวอร์พัง
+                }
+                localStorage.removeItem('userRole');
+                localStorage.removeItem('userEmail');
+                localStorage.removeItem('userProfile');
+                window.location.href = '/';
+              }}
+              className="text-xs font-bold text-slate-400 hover:text-red-600 border border-slate-200 hover:border-red-200 hover:bg-red-50 rounded-full px-3.5 py-1.5 transition-colors"
+            >
+              ออกจากระบบ
+            </button>
           </div>
         </div>
       </header>

@@ -746,11 +746,29 @@ export default function PortfolioStorage() {
                     )}
                   </div>
 
-                  <div className="border-t border-slate-100 p-3">
+                  <div className="border-t border-slate-100 p-3 space-y-2">
                     {/* แก้ไขลิงก์ตรงนี้ให้วิ่งไปหน้า /profile/edit */}
                     <Link href="/profile/edit" className="block w-full text-center px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-bold text-sm transition-colors">
                       แก้ไขโปรไฟล์
                     </Link>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const { signOutReal } = await import('../../lib/auth');
+                          await signOutReal();
+                        } catch {
+                          // ออกแบบ local ได้แม้เซิร์ฟเวอร์พัง
+                        }
+                        localStorage.removeItem('userRole');
+                        localStorage.removeItem('userEmail');
+                        localStorage.removeItem('userProfile');
+                        window.location.href = '/';
+                      }}
+                      className="block w-full text-center px-4 py-2.5 bg-white border border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-slate-600 rounded-full font-bold text-sm transition-colors"
+                    >
+                      ออกจากระบบ
+                    </button>
                   </div>
                 </div>
               )}

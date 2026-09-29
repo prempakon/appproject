@@ -43,11 +43,20 @@ export async function GET(request: Request) {
         );
         const { data: profile } = await supabase
           .from('profiles')
-          .select('role')
+          .select('role,created_at,major')
           .eq('id', user.id)
           .single();
-        if ((profile as { role?: string } | null)?.role === 'admin') {
+        const dbRole = (profile as { role?: string } | null)?.role ?? role;
+        if (dbRole === 'admin') {
           return NextResponse.redirect(`${origin}/admin`);
+        }
+        // ผู้ใช้ครั้งแรก (สมัครผ่าน Google เมื่อกี้นี้) ส่งไปกรอกข้อมูลให้ครบก่อน
+        const createdAt = (profile as { created_at?: string } | null)?.created_at;
+        const major = (profile as { major?: string } | null)?.major;
+        const isFresh =
+          !!createdAt && Date.now() - new Date(createdAt).getTime() < 120_000 && (!major || major === '-');
+        if (isFresh) {
+          return NextResponse.redirect(`${origin}/profile/edit`);
         }
       }
       return NextResponse.redirect(`${origin}${next}`);

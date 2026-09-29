@@ -71,12 +71,26 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
   const downloadPdf = async () => {
     if (!reportRef.current || downloading) return;
     setDownloading(true);
+    const root = reportRef.current;
+    const prevRootMax = root.style.maxHeight;
+    const prevRootOverflow = root.style.overflow;
+    const body = root.querySelector<HTMLElement>('[data-report-body]');
+    const prevBodyMax = body?.style.maxHeight ?? '';
+    const prevBodyOverflow = body?.style.overflow ?? '';
     try {
       const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
         import('html2canvas-pro'),
         import('jspdf'),
       ]);
-      const canvas = await html2canvas(reportRef.current, { scale: 2, backgroundColor: '#ffffff' });
+      // คลายความสูงให้เนื้อหาทั้งหมดเรนเดอร์ครบ (ของที่เลื่อนลงไปจะได้ไม่ถูกตัด)
+      root.style.maxHeight = 'none';
+      root.style.overflow = 'visible';
+      if (body) {
+        body.style.maxHeight = 'none';
+        body.style.overflow = 'visible';
+      }
+      await document.fonts?.ready;
+      const canvas = await html2canvas(root, { scale: 2, backgroundColor: '#ffffff' });
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
       const pageW = pdf.internal.pageSize.getWidth();
@@ -107,6 +121,12 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
       const stamp = new Date().toISOString().slice(0, 10);
       pdf.save(`ผลวิเคราะห์ทักษะ-${stamp}.pdf`);
     } finally {
+      root.style.maxHeight = prevRootMax;
+      root.style.overflow = prevRootOverflow;
+      if (body) {
+        body.style.maxHeight = prevBodyMax;
+        body.style.overflow = prevBodyOverflow;
+      }
       setDownloading(false);
     }
   };
@@ -155,7 +175,7 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
         </div>
 
         {/* ส่วนเนื้อหา Body */}
-        <div className="p-6 md:p-8 overflow-y-auto flex-grow space-y-8 bg-white custom-scrollbar">
+        <div data-report-body className="p-6 md:p-8 overflow-y-auto flex-grow space-y-8 bg-white custom-scrollbar">
           {lowConfidence && (
             <p className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
               ⚠ ผลวิเคราะห์นี้เป็นเพียงการประเมินเบื้องต้น อาจไม่แม่นยำ 100% — หลักฐานยังน้อยหรือคลุมเครือ ลองอัปโหลดใบเซอร์ ทรานสคริปต์ หรืองานที่ชัดขึ้นแล้ววิเคราะห์ใหม่
@@ -246,7 +266,7 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
           {rawInput && (
             <section>
               <h4 className="text-sm font-extrabold text-slate-800 mb-4">ข้อมูลประกอบการวิเคราะห์</h4>
-              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5">
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-[0_2px_12px_rgba(15,23,42,0.05)]">
               <p className="text-xs font-medium text-slate-700 whitespace-pre-line">{rawInput}</p>
               {textWarning && (
                 <p className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mt-3">⚠ {textWarning}</p>
@@ -275,7 +295,7 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
           {/* คำแนะนำจาก AI */}
           <section>
             <h4 className="text-sm font-extrabold text-slate-800 mb-4">คำแนะนำและคอร์สเรียนเพิ่มศักยภาพ</h4>
-            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5">
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-[0_2px_12px_rgba(15,23,42,0.05)]">
             
             <div className="space-y-4">
               {recommendations ? (

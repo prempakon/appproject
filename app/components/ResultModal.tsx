@@ -175,8 +175,8 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
                 </svg>
               </div>
               <div>
-                <p className="text-sm font-extrabold text-slate-500 uppercase tracking-widest">ความสอดคล้องสายงาน</p>
-                <p className="text-2xl font-extrabold text-slate-800 mt-2 leading-relaxed text-balance">{career}</p>
+                <p className="text-xs font-extrabold text-slate-500 uppercase tracking-widest">ความสอดคล้องสายงาน</p>
+                <p className="text-lg font-bold text-slate-700 mt-2 leading-relaxed text-balance">{career}</p>
               </div>
               {!analysis.career && (
                 <p className="text-[11px] text-slate-400 leading-relaxed">

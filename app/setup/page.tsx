@@ -79,6 +79,11 @@ function SetupForm() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
+    // กันเมลไม่มีโดเมนจริง (เช่น ggg@124) — เบราว์เซอร์เช็คหลวม ต้องเช็คเอง
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(formData.email.trim())) {
+      setAuthError('กรุณากรอกอีเมลให้ถูกต้อง เช่น name@gmail.com (ต้องมี .com หรือโดเมนจริง)');
+      return;
+    }
     setBusy(true);
     
     const fullName = `${formData.firstName} ${formData.lastName}`.trim();

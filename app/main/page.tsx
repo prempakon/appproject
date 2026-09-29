@@ -151,31 +151,12 @@ export default function PortfolioStorage() {
 
   useEffect(() => {
     // การ์ดหน้าแรก: ไม่มี session จริงและไม่มี local เดิม กลับไปล็อกอิน
-    // มี session แต่โปรไฟล์ยังไม่ครบ (ไม่มีสาขา) ดีดไปหน้าสมัครก่อนเสมอ
     (async () => {
       try {
         const { getSessionUser } = await import('../../lib/auth');
         const user = await getSessionUser();
         if (!user && !localStorage.getItem('userEmail')) {
           router.push('/');
-          return;
-        }
-        if (user) {
-          try {
-            const { getMyProfile } = await import('../../lib/profiles');
-            const profile = await getMyProfile(user.id);
-            const major = (profile as { major?: string } | null)?.major;
-            if (profile && (!major || major === '-')) {
-              router.push(`/setup?email=${encodeURIComponent((user.email ?? '').toLowerCase())}&oauth=1`);
-              return;
-            }
-            if (!profile && !localStorage.getItem('userEmail')) {
-              router.push('/');
-              return;
-            }
-          } catch {
-            // อ่านโปรไฟล์ไม่ได้ ปล่อยผ่าน (หน้า login/callback จัดการทางเข้าให้แล้ว)
-          }
         }
       } catch {
         if (!localStorage.getItem('userEmail')) router.push('/');

@@ -149,14 +149,15 @@ export async function POST(req: NextRequest) {
   };
 
   const callWithRetry = async <T>(fn: () => Promise<T>, label: string): Promise<T> => {
+    // ลองซ้ำแค่รอบเดียวพอ (ประหยัดโควต้ารายวัน ทุก attempt นับรวม)
     let lastErr: unknown = null;
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         return await fn();
       } catch (e) {
         lastErr = e;
         console.error(`Gemini ${label} attempt ${attempt} failed:`, e instanceof Error ? e.message.slice(0, 200) : e);
-        if (!isRetryable(e) || attempt === 3) throw e;
+        if (!isRetryable(e) || attempt === 2) throw e;
         await new Promise((r) => setTimeout(r, 1500 * attempt));
       }
     }

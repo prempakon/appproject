@@ -36,6 +36,7 @@ Bucket definitions:
 - REPORT:รายงาน/เอกสารประกอบที่มีเนื้อหาวิชาการ
 - IRRELEVANT:selfie, รูปคน, รูปจดโน้ตมั่วๆ ที่อ่านไม่ออกหรือไม่เกี่ยวกับวิชา, meme, ภาพว่าง/เบลอจนดูไม่ออก, ภาพซ้ำ
 - NOTE: ตราประทับ "SAMPLE / ตัวอย่าง / SPECIMEN" บนใบเซอร์เป็นแค่ลายน้ำตัวอย่าง ให้นับเป็น CERTIFICATE ตามเนื้อหา ห้ามหักความมั่นใจเพราะลายน้ำ
+- NOTE: วิเคราะห์เนื้อหาเอกสารตามที่เห็น ห้ามตั้งคำถามว่าเอกสารจริงหรือ AI สร้าง (เช่น รูปจาก ChatGPT) — ถ้าอ่านเนื้อหาออกให้นับเป็นหลักฐานตามปกติ
 RULE: IRRELEVANT files contribute ZERO skills. Every skill must trace to a CERTIFICATE/TRANSCRIPT/PROJECT/REPORT file. Quote or describe the exact evidence per skill in your reasoning.
 
 Synthesize:

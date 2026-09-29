@@ -474,12 +474,12 @@ export default function AdminDashboard() {
                   <div className="space-y-3">
                     {viewing.latestAnalysis.accuracy < 30 && (
                       <p className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-                        ⚠ AI ไม่มั่นใจผลนี้ (ความแม่นยำ {viewing.latestAnalysis.accuracy}%)
+                        ⚠ AI ยังไม่มั่นใจผลนี้ — หลักฐานน้อยหรือคลุมเครือ
                       </p>
                     )}
                     <div className="flex items-center gap-3">
-                      <span className="text-2xl font-extrabold text-slate-800">{viewing.latestAnalysis.accuracy}%</span>
-                      <span className="text-[11px] font-medium text-slate-400">ความแม่นยำ</span>
+                      <span className="text-[11px] font-medium text-slate-400">สายงานที่สอดคล้อง</span>
+                      <span className="text-sm font-extrabold text-slate-800">{viewing.careerTh}</span>
                     </div>
                     {[
                       { label: 'Technical', value: viewing.latestAnalysis.technical, color: 'bg-blue-500' },
@@ -489,7 +489,6 @@ export default function AdminDashboard() {
                       <div key={bar.label}>
                         <div className="flex justify-between text-[11px] font-bold text-slate-600 mb-1">
                           <span>{bar.label}</span>
-                          <span>{bar.value}%</span>
                         </div>
                         <div className="w-full bg-slate-200 rounded-full h-1.5">
                           <div className={`${bar.color} h-1.5 rounded-full`} style={{ width: `${bar.value}%` }}></div>

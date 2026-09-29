@@ -158,32 +158,22 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
         <div className="p-6 md:p-8 overflow-y-auto flex-grow space-y-8 bg-white custom-scrollbar">
           {lowConfidence && (
             <p className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-              ⚠ AI ไม่มั่นใจผลนี้ (ความแม่นยำ {accuracy}%) — หลักฐานยังน้อยหรือคลุมเครือ อัปโหลดใบเซอร์ ทรานสคริปต์ หรืองานที่ชัดขึ้นแล้ววิเคราะห์ใหม่
+              ⚠ AI ยังไม่มั่นใจผลนี้ — หลักฐานน้อยหรือคลุมเครือ อัปโหลดใบเซอร์ ทรานสคริปต์ หรืองานที่ชัดขึ้นแล้ววิเคราะห์ใหม่
               {modelName?.includes('lite') ? ' (ครั้งนี้โมเดลหลักไม่ว่าง ใช้รุ่นสำรองตอบ ผลอาจละเอียดน้อยกว่า)' : ''}
             </p>
           )}
           
-          {/* Card 1: สัดส่วนทักษะและความแม่นยำ */}
+          {/* Card 1: สายงานที่สอดคล้อง */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             
-            {/* ความแม่นยำ (วงกลม) */}
+            {/* สายงาน */}
             <div className="col-span-1 border border-slate-100 rounded-2xl p-6 flex flex-col items-center justify-center bg-slate-50/50">
-              <div className="relative w-28 h-28 flex items-center justify-center mb-4">
-                <svg className="w-full h-full transform -rotate-90">
-                  <circle cx="56" cy="56" r="46" stroke="currentColor" strokeWidth="10" fill="transparent" className="text-blue-100" />
-                  <circle cx="56" cy="56" r="46" stroke="currentColor" strokeWidth="10" fill="transparent" strokeDasharray="289" strokeDashoffset={289 - (289 * accuracy) / 100} className="text-blue-600 drop-shadow-md" strokeLinecap="round" />
-                </svg>
-                <div className="absolute flex flex-col items-center justify-center">
-                  <span className="text-3xl font-extrabold text-slate-800">{accuracy}%</span>
-                  <span className="text-[10px] font-bold text-slate-400 mt-1">ความแม่นยำ</span>
-                </div>
-              </div>
-              <div className="text-center mt-2">
+              <div className="text-center">
                 <p className="text-xs font-bold text-slate-800 mb-1">ความสอดคล้องสายงาน</p>
-                <p className="text-xs text-slate-500">{career}</p>
+                <p className="text-base font-extrabold text-slate-800">{career}</p>
                 {!analysis.career && (
                   <p className="text-[11px] text-slate-400 mt-1.5">
-                    หลักฐานยังน้อย (ความแม่นยำ {accuracy}%) อัปโหลดใบเซอร์ ทรานสคริปต์ หรืองานโปรเจกต์เพิ่มเพื่อให้ AI แนะนำสายงานได้
+                    หลักฐานยังน้อย อัปโหลดใบเซอร์ ทรานสคริปต์ หรืองานโปรเจกต์เพิ่มเพื่อให้ AI แนะนำสายงานได้
                   </p>
                 )}
               </div>

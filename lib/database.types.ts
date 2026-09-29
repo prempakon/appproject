@@ -41,9 +41,12 @@ export interface AnalysisResult {
   analyzed_at: string;
 }
 
-// รายชื่อแอดมินเดิมจาก app/page.tsx:13 — ย้ายมาไว้ที่เดียวเพื่อใช้ตอนสมัคร/seed role
+// รายชื่อแอดมินเดิม (คงไว้ให้บัญชีเก่า) + กติกาใหม่: เมล @admin.com = แอดมิน
 export const ADMIN_EMAILS = ['admin@lru.ac.th', 'superadmin@lru.ac.th'];
 
 export function resolveRole(email: string): UserRole {
-  return ADMIN_EMAILS.includes(email.trim().toLowerCase()) ? 'admin' : 'student';
+  const clean = email.trim().toLowerCase();
+  if (ADMIN_EMAILS.includes(clean)) return 'admin';
+  if (clean.endsWith('@admin.com')) return 'admin';
+  return 'student';
 }

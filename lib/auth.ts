@@ -45,6 +45,6 @@ export async function getSessionUser() {
 export function signInWithGoogleReal() {
   return supabase.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: `${window.location.origin}/main` },
+    options: { redirectTo: `${window.location.origin}/auth/callback` },
   });
 }

@@ -322,7 +322,7 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
         </div>
 
         {/* Footer ของ Modal (ไม่รวมใน PDF) */}
-        <div className="px-6 md:px-8 py-5 border-t border-slate-100 flex flex-col sm:flex-row justify-end items-stretch sm:items-center gap-3 bg-slate-50/80 flex-shrink-0">
+        <div data-html2canvas-ignore className="px-6 md:px-8 py-5 border-t border-slate-100 flex flex-col sm:flex-row justify-end items-stretch sm:items-center gap-3 bg-slate-50/80 flex-shrink-0">
           <button 
             onClick={onClose} 
             className="w-full sm:w-auto px-8 py-2.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-lg font-bold text-sm transition-all active:scale-95"

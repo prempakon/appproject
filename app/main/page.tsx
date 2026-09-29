@@ -208,7 +208,8 @@ export default function PortfolioStorage() {
     } | null = null;
     // ย่อรูปก่อนส่งให้ AI (ประหยัดโควต้า token + เร็วขึ้น ไฟล์ต้นฉบับยังอัปโหลดเต็มขนาด)
     // เอกสารตัวหนังสือใช้ 1600px เพื่อให้ AI อ่านข้อความในใบเซอร์ได้ชัด
-    const downscaleImage = (file: File, maxSide = 1600): Promise<File> => {
+    // หมายเหตุ: Vercel รับ body ได้ไม่เกิน ~4.5MB เลยย่อเหลือ 1024px คุณภาพ 0.8
+    const downscaleImage = (file: File, maxSide = 1024): Promise<File> => {
       return new Promise((resolve) => {
         if (!file.type.startsWith('image/')) {
           resolve(file);
@@ -231,7 +232,7 @@ export default function PortfolioStorage() {
           canvas.toBlob(
             (blob) => resolve(blob ? new File([blob], file.name.replace(/\.\w+$/, '.jpg'), { type: 'image/jpeg' }) : file),
             'image/jpeg',
-            0.85,
+            0.8,
           );
         };
         img.onerror = () => {
@@ -252,6 +253,9 @@ export default function PortfolioStorage() {
         form.append('files', await downscaleImage(f), f.name);
       }
       const res = await fetch('/api/analyze', { method: 'POST', body: form });
+      if (res.status === 413) {
+        throw new Error('ไฟล์รวมใหญ่เกินไป (เกิน ~4MB) ลดจำนวนไฟล์ต่อรอบ (ไม่เกิน 3 ไฟล์) แล้วลองใหม่');
+      }
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({})) as { error?: string; detail?: string };
         if (errBody.detail) console.error('AI analyze detail:', errBody.detail);

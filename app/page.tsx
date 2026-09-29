@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getSessionUser, signInReal, signInWithGoogleReal } from '../lib/auth';
-import { getMyProfile } from '../lib/profiles';
+import { getMyProfile, upsertMyProfile } from '../lib/profiles';
 import { resolveRole } from '../lib/database.types';
 
 export default function LoginPage() {
@@ -52,7 +52,17 @@ function LoginForm() {
         let toSetup = false;
         try {
           const profile = await getMyProfile(user.id);
-          if (profile) {
+          if (!profile) {
+            // implicit flow ครั้งแรก: ยังไม่มีแถวโปรไฟล์ สร้างแล้วส่งไปหน้าสมัคร
+            await upsertMyProfile(user.id, {
+              email: cleanEmail,
+              name: (user.user_metadata?.full_name as string) || cleanEmail.split('@')[0] || 'ผู้ใช้ Google',
+              institution: 'มหาวิทยาลัยราชภัฏเลย',
+              major: '-',
+              avatar_url: (user.user_metadata?.avatar_url as string) ?? null,
+            });
+            toSetup = true;
+          } else {
             role = (profile.role as 'admin' | 'student') ?? role;
             name = profile.name;
             avatar = profile.avatar_url ?? undefined;

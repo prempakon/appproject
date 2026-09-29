@@ -163,32 +163,31 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
             </p>
           )}
           
-          {/* Card 1: สายงานที่สอดคล้อง */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            
-            {/* สายงาน */}
-            <div className="col-span-1 border border-slate-100 rounded-2xl p-8 flex flex-col items-center justify-center bg-gradient-to-b from-blue-50/80 via-white to-white text-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-600/25">
+          {/* สรุปสายงานที่สอดคล้อง */}
+          <section>
+            <h4 className="text-sm font-extrabold text-slate-800 mb-4">สรุปสายงานที่สอดคล้อง</h4>
+            <div className="border border-slate-100 rounded-2xl p-6 flex items-center gap-5 bg-gradient-to-r from-blue-50/80 via-white to-white">
+              <div className="w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-600/25 flex-shrink-0">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-7 h-7">
                   <path fillRule="evenodd" d="M7.5 5.25a3 3 0 013-3h3a3 3 0 013 3v.205c.933.085 1.857.197 2.774.334 1.454.218 2.476 1.483 2.476 2.917v3.033c0 1.211-.734 2.352-1.936 2.752-1.131.378-2.336.378-3.467 0-1.202-.4-1.936-1.541-1.936-2.752v-.747a8.51 8.51 0 01-3.423 0v.747c0 1.211-.734 2.352-1.936 2.752-1.131.378-2.336.378-3.467 0-1.202-.4-1.936-1.541-1.936-2.752V8.706c0-1.434 1.022-2.7 2.476-2.917A48.716 48.716 0 017.5 5.455V5.25zm3 0a.75.75 0 01.75-.75h3a.75.75 0 01.75.75v.205a48.34 48.34 0 00-4.5 0V5.25z" clipRule="evenodd" />
                   <path d="M3 15.75v-2.25c0-.99.56-1.897 1.448-2.34l.827-.413a.75.75 0 011.342.342V15a3 3 0 013 3h3a3 3 0 013-3v-3.66a.75.75 0 011.342-.342l.827.413c.888.443 1.448 1.35 1.448 2.34v2.25a2.25 2.25 0 01-2.25 2.25h-11.5a2.25 2.25 0 01-2.25-2.25z" />
                 </svg>
               </div>
-              <div>
-                <p className="text-lg font-extrabold text-slate-800">ความสอดคล้องสายงาน</p>
-                <p className="text-base font-bold text-slate-600 mt-2 leading-relaxed text-balance">{career}</p>
+              <div className="min-w-0">
+                <p className="text-lg font-extrabold text-slate-800 leading-relaxed text-balance">{career}</p>
+                {!analysis.career && (
+                  <p className="text-[11px] text-slate-400 leading-relaxed mt-1">
+                    หลักฐานยังน้อย อัปโหลดใบเซอร์ ทรานสคริปต์ หรืองานโปรเจกต์เพิ่มเพื่อให้ AI แนะนำสายงานได้
+                  </p>
+                )}
               </div>
-              {!analysis.career && (
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                  หลักฐานยังน้อย อัปโหลดใบเซอร์ ทรานสคริปต์ หรืองานโปรเจกต์เพิ่มเพื่อให้ AI แนะนำสายงานได้
-                </p>
-              )}
             </div>
+          </section>
 
-            {/* Progress Bars (ขวา) */}
-            <div className="col-span-1 md:col-span-2 border border-slate-100 rounded-2xl p-6 bg-slate-50/50 flex flex-col justify-center">
-              <h4 className="text-sm font-extrabold text-slate-800 mb-5">สัดส่วนทักษะเฉพาะด้าน (Proficiency)</h4>
-              
+          {/* ระดับทักษะรายด้าน */}
+          <section>
+            <h4 className="text-sm font-extrabold text-slate-800 mb-4">ระดับทักษะรายด้าน</h4>
+            <div className="border border-slate-100 rounded-2xl p-6 bg-slate-50/50">
               <div className="space-y-4">
                 {/* Bar 1 */}
                 <div>
@@ -224,13 +223,13 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
                 </div>
               </div>
             </div>
-          </div>
+          </section>
 
-          {/* Card 2: ทักษะที่ตรวจพบ */}
-          <div>
+          {/* ทักษะที่ตรวจพบ */}
+          <section>
             <div className="flex items-center gap-3 mb-4">
               <h4 className="text-sm font-extrabold text-slate-800">ทักษะที่ตรวจพบจากเอกสาร</h4>
-              <span className="bg-blue-50 text-blue-600 text-[10px] font-bold px-2 py-0.5 rounded border border-blue-100">{skills.length} ทักษะใหม่</span>
+              <span className="bg-blue-50 text-blue-600 text-[10px] font-bold px-2 py-0.5 rounded border border-blue-100">{skills.length} ทักษะ</span>
             </div>
             <div className="flex flex-wrap gap-2.5">
               {skills.length > 0 ? (
@@ -241,17 +240,19 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
                 <p className="text-xs font-medium text-slate-600">ไม่พบทักษะจากไฟล์ที่ส่ง — ดูรายการไฟล์ที่ AI ไม่นับด้านล่าง</p>
               )}
             </div>
-          </div>
+          </section>
 
-          {/* สิ่งที่นักศึกษาพิมพ์ + คำเตือนข้อความไม่เกี่ยว */}
+          {/* ข้อมูลประกอบการวิเคราะห์ */}
           {rawInput && (
-            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5">
-              <h4 className="text-sm font-extrabold text-slate-800 mb-2">สิ่งที่คุณพิมพ์บอก AI</h4>
+            <section>
+              <h4 className="text-sm font-extrabold text-slate-800 mb-4">ข้อมูลประกอบการวิเคราะห์</h4>
+              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5">
               <p className="text-xs font-medium text-slate-700 whitespace-pre-line">{rawInput}</p>
               {textWarning && (
                 <p className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mt-3">⚠ {textWarning}</p>
               )}
             </div>
+          </section>
           )}
 
           {/* เตือนไฟล์ที่ไม่ใช่ผลงาน (AI ไม่นับเป็นทักษะ) */}
@@ -271,14 +272,10 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
             </div>
           )}
 
-          {/* Card 3: คำแนะนำจาก AI */}
-          <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5">
-            <h4 className="text-sm font-extrabold text-slate-800 mb-4 flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-blue-500">
-                <path fillRule="evenodd" d="M12.963 2.286a.75.75 0 00-1.071-.136 9.742 9.742 0 00-3.539 6.177A7.547 7.547 0 016.648 6.61a.75.75 0 00-1.152-.082A9 9 0 1015.68 4.534a7.46 7.46 0 01-2.717-2.248zM15.75 14.25a3.75 3.75 0 11-7.313-1.172c.628.465 1.35.81 2.133 1a5.99 5.99 0 011.925-3.545 3.75 3.75 0 013.255 3.717z" clipRule="evenodd" />
-              </svg>
-              คำแนะนำและคอร์สเรียนเพิ่มศักยภาพโดย AI
-            </h4>
+          {/* คำแนะนำจาก AI */}
+          <section>
+            <h4 className="text-sm font-extrabold text-slate-800 mb-4">คำแนะนำและคอร์สเรียนเพิ่มศักยภาพ</h4>
+            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5">
             
             <div className="space-y-4">
               {recommendations ? (
@@ -300,6 +297,7 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
               )}
             </div>
           </div>
+          </section>
 
         </div>
 

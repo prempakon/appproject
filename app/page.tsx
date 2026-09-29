@@ -49,12 +49,19 @@ function LoginForm() {
         let role: 'admin' | 'student' = resolveRole(cleanEmail);
         let name: string | undefined;
         let avatar: string | undefined;
+        let toSetup = false;
         try {
           const profile = await getMyProfile(user.id);
           if (profile) {
             role = (profile.role as 'admin' | 'student') ?? role;
             name = profile.name;
             avatar = profile.avatar_url ?? undefined;
+            // ผู้ใช้ครั้งแรก (โปรไฟล์เพิ่งสร้าง + ยังไม่มีสาขา) ส่งไปหน้าสมัครผูกเมล
+            const createdAt = (profile as { created_at?: string }).created_at;
+            const major = (profile as { major?: string }).major;
+            if (createdAt && Date.now() - new Date(createdAt).getTime() < 120_000 && (!major || major === '-')) {
+              toSetup = true;
+            }
           }
         } catch {
           // ใช้ role จากอีเมลแทน
@@ -62,7 +69,11 @@ function LoginForm() {
         if (cancelled) return;
         saveLocalSession(cleanEmail, role, name, avatar);
         window.history.replaceState(null, '', '/');
-        router.push(role === 'admin' ? '/admin' : '/main');
+        if (toSetup && role !== 'admin') {
+          router.push(`/setup?email=${encodeURIComponent(cleanEmail)}&oauth=1`);
+        } else {
+          router.push(role === 'admin' ? '/admin' : '/main');
+        }
       } catch {
         // ไม่มี session ค้าง แสดงหน้าล็อกอินตามปกติ
       }

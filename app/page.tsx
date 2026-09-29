@@ -1,8 +1,8 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { signInReal, signInWithGoogleReal } from '../lib/auth';
+import { getSessionUser, signInReal, signInWithGoogleReal } from '../lib/auth';
 import { getMyProfile } from '../lib/profiles';
 import { resolveRole } from '../lib/database.types';
 
@@ -36,6 +36,41 @@ function LoginForm() {
       }));
     }
   };
+
+  // รองรับ implicit flow: ถ้า Supabase คืน session มาทาง URL hash ให้เก็บเข้าระบบเลย
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const user = await getSessionUser();
+        if (!user || cancelled) return;
+        const cleanEmail = (user.email ?? '').toLowerCase();
+        if (!cleanEmail) return;
+        let role: 'admin' | 'student' = resolveRole(cleanEmail);
+        let name: string | undefined;
+        let avatar: string | undefined;
+        try {
+          const profile = await getMyProfile(user.id);
+          if (profile) {
+            role = (profile.role as 'admin' | 'student') ?? role;
+            name = profile.name;
+            avatar = profile.avatar_url ?? undefined;
+          }
+        } catch {
+          // ใช้ role จากอีเมลแทน
+        }
+        if (cancelled) return;
+        saveLocalSession(cleanEmail, role, name, avatar);
+        window.history.replaceState(null, '', '/');
+        router.push(role === 'admin' ? '/admin' : '/main');
+      } catch {
+        // ไม่มี session ค้าง แสดงหน้าล็อกอินตามปกติ
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

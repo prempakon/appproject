@@ -461,62 +461,6 @@ export default function AdminDashboard() {
                   <p className="text-xs font-medium text-slate-400">ยังไม่มีผลวิเคราะห์ทักษะ</p>
                 )}
               </div>
-              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4">
-                <div className="flex items-center justify-between gap-2 mb-3">
-                  <p className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wide">ผลการวิเคราะห์ล่าสุด</p>
-                  {viewing.latestAnalysis && (
-                    <span className="text-[10px] font-medium text-slate-400">
-                      {new Date(viewing.latestAnalysis.analyzed_at).toLocaleDateString('th-TH')}
-                    </span>
-                  )}
-                </div>
-                {viewing.latestAnalysis ? (
-                  <div className="space-y-3">
-                    {viewing.latestAnalysis.accuracy < 30 && (
-                      <p className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-                        ⚠ ผลนี้เป็นการประเมินเบื้องต้น อาจไม่แม่นยำ 100% — หลักฐานน้อยหรือคลุมเครือ
-                      </p>
-                    )}
-                    <div className="flex items-center gap-3">
-                      <span className="text-[11px] font-medium text-slate-400">สายงานที่สอดคล้อง</span>
-                      <span className="text-sm font-extrabold text-slate-800">{viewing.careerTh}</span>
-                    </div>
-                    {[
-                      { label: 'Technical', value: viewing.latestAnalysis.technical, color: 'bg-blue-500' },
-                      { label: 'Soft Skills', value: viewing.latestAnalysis.soft, color: 'bg-purple-500' },
-                      { label: 'Management', value: viewing.latestAnalysis.management, color: 'bg-indigo-500' },
-                    ].map((bar) => (
-                      <div key={bar.label}>
-                        <div className="flex justify-between text-[11px] font-bold text-slate-600 mb-1">
-                          <span>{bar.label}</span>
-                        </div>
-                        <div className="w-full bg-slate-200 rounded-full h-1.5">
-                          <div className={`${bar.color} h-1.5 rounded-full`} style={{ width: `${bar.value}%` }}></div>
-                        </div>
-                      </div>
-                    ))}
-                    {viewing.latestAnalysis.recommendations.length > 0 && (
-                      <div className="pt-1 space-y-2">
-                        {viewing.latestAnalysis.recommendations.map((rec, i) => (
-                          <div key={i}>
-                            <p className="text-xs font-extrabold text-slate-700">{rec.title}</p>
-                            <p className="text-[11px] text-slate-500">{rec.detail}</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {viewing.latestAnalysis.warnings.length > 0 && (
-                      <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-                        {viewing.latestAnalysis.warnings.map((w, i) => (
-                          <p key={i} className="text-[11px] font-bold text-amber-700">⚠ {w}</p>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-xs font-medium text-slate-400">ยังไม่มีผลวิเคราะห์</p>
-                )}
-              </div>
               <div>
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wide">ผลงานที่อัปโหลด ({viewing.files} ไฟล์)</p>

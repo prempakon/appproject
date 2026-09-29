@@ -77,6 +77,7 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
     const body = root.querySelector<HTMLElement>('[data-report-body]');
     const prevBodyMax = body?.style.maxHeight ?? '';
     const prevBodyOverflow = body?.style.overflow ?? '';
+    const hidden: { el: HTMLElement; prev: string }[] = [];
     try {
       const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
         import('html2canvas-pro'),
@@ -89,6 +90,11 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
         body.style.maxHeight = 'none';
         body.style.overflow = 'visible';
       }
+      // ซ่อนส่วนที่ไม่เอาใน PDF (ปุ่มกด) ตรงๆ ไม่พึ่ง option ของ lib
+      root.querySelectorAll<HTMLElement>('[data-pdf-hide]').forEach((el) => {
+        hidden.push({ el, prev: el.style.display });
+        el.style.display = 'none';
+      });
       await document.fonts?.ready;
       const canvas = await html2canvas(root, { scale: 2, backgroundColor: '#ffffff' });
       const imgData = canvas.toDataURL('image/png');
@@ -121,6 +127,9 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
       const stamp = new Date().toISOString().slice(0, 10);
       pdf.save(`ผลวิเคราะห์ทักษะ-${stamp}.pdf`);
     } finally {
+      hidden.forEach(({ el, prev }) => {
+        el.style.display = prev;
+      });
       root.style.maxHeight = prevRootMax;
       root.style.overflow = prevRootOverflow;
       if (body) {
@@ -322,7 +331,7 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
         </div>
 
         {/* Footer ของ Modal (ไม่รวมใน PDF) */}
-        <div data-html2canvas-ignore className="px-6 md:px-8 py-5 border-t border-slate-100 flex flex-col sm:flex-row justify-end items-stretch sm:items-center gap-3 bg-slate-50/80 flex-shrink-0">
+        <div data-pdf-hide className="px-6 md:px-8 py-5 border-t border-slate-100 flex flex-col sm:flex-row justify-end items-stretch sm:items-center gap-3 bg-slate-50/80 flex-shrink-0">
           <button 
             onClick={onClose} 
             className="w-full sm:w-auto px-8 py-2.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-lg font-bold text-sm transition-all active:scale-95"

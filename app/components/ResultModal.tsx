@@ -290,8 +290,8 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
                       </svg>
                     </div>
                     <div>
-                      <p className="text-xs font-extrabold text-slate-800 mb-0.5">{rec.title}</p>
-                      <p className="text-[11px] text-slate-500">{rec.detail}</p>
+                      <p className="text-sm font-extrabold text-slate-800 mb-0.5">{rec.title}</p>
+                      <p className="text-xs text-slate-500">{rec.detail}</p>
                     </div>
                   </div>
                 ))

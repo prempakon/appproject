@@ -23,7 +23,7 @@ function LoginForm() {
   const [googleBusy, setGoogleBusy] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const oauthError = searchParams.get('error') === 'oauth';
+  const oauthError = searchParams.get('oauth') === 'failed';
 
   const saveLocalSession = (cleanEmail: string, role: 'admin' | 'student', name?: string, avatar?: string) => {
     localStorage.setItem('userRole', role);

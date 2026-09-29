@@ -235,12 +235,13 @@ export default function AdminDashboard() {
     try {
       const { deleteProfileForAdmin } = await import('../../lib/profiles');
       await deleteProfileForAdmin(deleting.userId);
-    } catch {
-      // ลบใน DB ไม่สำเร็จก็เอาออกจากจอพร้อมแจ้งผ่าน loadError
-      setLoadError('ลบในฐานข้อมูลไม่สำเร็จ แต่เอาออกจากรายการจอแล้ว');
+      setRows((prev) => prev.filter((row) => row.id !== deleting.id));
+      setDeleting(null);
+    } catch (err) {
+      // ลบจริงไม่สำเร็จ: เก็บแถวไว้ + บอกสาเหตุชัดๆ (ส่วนใหญ่คือยังไม่รัน fix_rls_admin.sql ตัวใหม่)
+      const msg = err instanceof Error ? err.message : typeof err === 'object' && err !== null && typeof (err as { message?: unknown }).message === 'string' ? (err as { message: string }).message : 'ลบในฐานข้อมูลไม่สำเร็จ';
+      setLoadError(`ลบ ${deleting.name} ไม่สำเร็จ: ${msg} — รัน supabase/fix_rls_admin.sql ใหม่ใน SQL Editor แล้วลองอีกครั้ง`);
     }
-    setRows((prev) => prev.filter((row) => row.id !== deleting.id));
-    setDeleting(null);
   };
 
   return (

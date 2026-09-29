@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getSessionUser, signInReal, signInWithGoogleReal } from '../lib/auth';
-import { getMyProfile, upsertMyProfile } from '../lib/profiles';
+import { getMyProfile } from '../lib/profiles';
 import { resolveRole } from '../lib/database.types';
 
 export default function LoginPage() {
@@ -46,6 +46,8 @@ function LoginForm() {
         if (!user || cancelled) return;
         const cleanEmail = (user.email ?? '').toLowerCase();
         if (!cleanEmail) return;
+        // เพิ่งกลับจาก Google (มี token/code ใน URL) = ต้องตัดสินให้เด็ดขาด ห้ามเงียบ
+        const isOAuthReturn = /[?#].*(access_token|code=)/.test(window.location.href);
         let role: 'admin' | 'student' = resolveRole(cleanEmail);
         let name: string | undefined;
         let avatar: string | undefined;
@@ -53,14 +55,8 @@ function LoginForm() {
         try {
           const profile = await getMyProfile(user.id);
           if (!profile) {
-            // implicit flow ครั้งแรก: ยังไม่มีแถวโปรไฟล์ สร้างแล้วส่งไปหน้าสมัคร
-            await upsertMyProfile(user.id, {
-              email: cleanEmail,
-              name: (user.user_metadata?.full_name as string) || cleanEmail.split('@')[0] || 'ผู้ใช้ Google',
-              institution: 'มหาวิทยาลัยราชภัฏเลย',
-              major: '-',
-              avatar_url: (user.user_metadata?.avatar_url as string) ?? null,
-            });
+            // implicit flow ครั้งแรก: ยังไม่มีแถวโปรไฟล์ ส่งไปหน้าสมัคร
+            // (สร้างแถวจริงตอนกดบันทึกใน setup เท่านั้น ไม่สร้างล่วงหน้า)
             toSetup = true;
           } else {
             role = (profile.role as 'admin' | 'student') ?? role;
@@ -73,7 +69,9 @@ function LoginForm() {
             }
           }
         } catch {
-          // ใช้ role จากอีเมลแทน
+          // อ่าน/สร้างโปรไฟล์ไม่สำเร็จ: ถ้าเพิ่งกลับจาก Google ให้ไปหน้าสมัครไว้ก่อน
+          // ดีกว่าปล่อยเข้า main ทั้งที่ไม่มีข้อมูล
+          if (isOAuthReturn) toSetup = true;
         }
         if (cancelled) return;
         saveLocalSession(cleanEmail, role, name, avatar);

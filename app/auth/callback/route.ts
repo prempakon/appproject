@@ -29,18 +29,8 @@ export async function GET(request: Request) {
       // สร้างโปรไฟล์ครั้งแรก (Google ไม่มีขั้นตอนสมัคร) + แบ่งสิทธิ์ตามโดเมน
       const { data: { user } } = await supabase.auth.getUser();
       if (user?.email) {
+        // ยังไม่สร้างแถวโปรไฟล์ตรงนี้ — ให้ไปสร้างตอนกดบันทึกใน setup เท่านั้น
         const role = resolveRole(user.email);
-        // สร้างเฉพาะครั้งแรก (ignoreDuplicates) ไม่ทับชื่อที่ผู้ใช้แก้ไว้
-        await supabase.from('profiles').upsert(
-          {
-            id: user.id,
-            email: user.email.toLowerCase(),
-            name: user.user_metadata?.full_name || user.email.split('@')[0] || 'ผู้ใช้ Google',
-            avatar_url: user.user_metadata?.avatar_url ?? null,
-            role,
-          },
-          { onConflict: 'id', ignoreDuplicates: true },
-        );
         const { data: profile } = await supabase
           .from('profiles')
           .select('role,created_at,major')

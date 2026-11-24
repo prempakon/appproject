@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient';
-import type { Profile } from './database.types';
+import type { Profile, UserStatus } from './database.types';
+import type { ScoreDimensions } from './platform.types';
 
 export async function getMyProfile(userId: string): Promise<Profile | null> {
   const { data, error } = await supabase
@@ -15,6 +16,19 @@ export async function getMyProfile(userId: string): Promise<Profile | null> {
 }
 
 export async function upsertMyProfile(userId: string, patch: Partial<Profile> & { email: string }) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .upsert({ id: userId, ...patch }, { onConflict: 'id' })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as Profile;
+}
+
+export async function upsertMyProfileWithStatus(
+  userId: string,
+  patch: Partial<Profile> & { email: string; user_status?: UserStatus | null },
+) {
   const { data, error } = await supabase
     .from('profiles')
     .upsert({ id: userId, ...patch }, { onConflict: 'id' })
@@ -69,8 +83,9 @@ export async function deleteProfileForAdmin(userId: string) {
 
 export async function adminUpdateProfile(userId: string, patch: {
   name: string;
-  institution: string;
-  major: string;
+  institution: string | null;
+  major: string | null;
+  user_status: UserStatus | null;
   role: 'student' | 'admin';
 }) {
   const { error } = await supabase.from('profiles').update(patch).eq('id', userId);
@@ -92,6 +107,8 @@ export interface MyAnalysisRow {
   skills: string[];
   career: string | null;
   career_en: string | null;
+  career_category: string | null;
+  radar_scores: ScoreDimensions | null;
   accuracy: number;
   technical: number;
   soft: number;
@@ -106,32 +123,57 @@ export interface MyAnalysisRow {
 export async function listMyAnalyses(userId: string): Promise<MyAnalysisRow[]> {
   const { data, error } = await supabase
     .from('analysis_results')
-    .select('id,portfolio_id,skills,career,career_en,accuracy,technical,soft,management,recommendations,analyzed_at,raw_input,warnings,technical_note,soft_note,management_note,portfolios(title)')
+    .select('id,portfolio_id,skills,career,career_en,career_category,radar_scores,accuracy,technical,soft,management,recommendations,analyzed_at,raw_input,warnings,technical_note,soft_note,management_note,portfolios(title)')
     .eq('user_id', userId)
     .order('analyzed_at', { ascending: false })
     .limit(20);
   if (error) throw error;
-  return ((data ?? []) as unknown as (Omit<MyAnalysisRow, 'portfolio_title'> & { portfolios: { title: string } | null })[]).map((r) => ({
-    id: r.id,
-    portfolio_id: r.portfolio_id,
-    portfolio_title: r.portfolios?.title ?? 'ไม่ทราบชื่อไฟล์',
-    skills: r.skills ?? [],
-    career: r.career ?? null,
-    career_en: (r as { career_en?: string | null }).career_en ?? null,
-    accuracy: r.accuracy ?? 85,
-    technical: r.technical ?? 90,
-    soft: r.soft ?? 65,
-    management: r.management ?? 50,
-    recommendations: (r.recommendations ?? []) as { title: string; detail: string }[],
-    analyzed_at: r.analyzed_at,
-    raw_input: (r as { raw_input?: string | null }).raw_input ?? null,
-    warnings: (r as { warnings?: string[] }).warnings ?? [],
-    skill_notes: {
-      technical: (r as { technical_note?: string | null }).technical_note ?? null,
-      soft: (r as { soft_note?: string | null }).soft_note ?? null,
-      management: (r as { management_note?: string | null }).management_note ?? null,
-    },
-  }));
+  const score = (v: unknown, fallback: number) => {
+    const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN;
+    return Number.isFinite(n) ? Math.min(100, Math.max(0, Math.round(n))) : fallback;
+  };
+  const rows = (data ?? []) as unknown as (Omit<MyAnalysisRow, 'portfolio_title' | 'career_category' | 'radar_scores'> & {
+    career_category?: string | null;
+    radar_scores?: Partial<ScoreDimensions> | null;
+    portfolios: { title: string } | null;
+  })[];
+  return rows.map((r) => {
+    const technical = r.technical ?? 0;
+    const soft = r.soft ?? 0;
+    const management = r.management ?? 0;
+    const accuracy = r.accuracy ?? 0;
+    const radar: ScoreDimensions = {
+      technical: score(r.radar_scores?.technical, technical),
+      soft: score(r.radar_scores?.soft, soft),
+      management: score(r.radar_scores?.management, management),
+      accuracy: score(r.radar_scores?.accuracy, accuracy),
+      communication: score(r.radar_scores?.communication, Math.round((technical + soft) / 2)),
+      creativity: score(r.radar_scores?.creativity, Math.round((soft + management) / 2)),
+    };
+    return {
+      id: r.id,
+      portfolio_id: r.portfolio_id,
+      portfolio_title: r.portfolios?.title ?? 'ไม่ทราบชื่อไฟล์',
+      skills: r.skills ?? [],
+      career: r.career ?? null,
+      career_en: (r as { career_en?: string | null }).career_en ?? null,
+      career_category: r.career_category ?? null,
+      radar_scores: radar,
+      accuracy: radar.accuracy,
+      technical: radar.technical,
+      soft: radar.soft,
+      management: radar.management,
+      recommendations: (r.recommendations ?? []) as { title: string; detail: string }[],
+      analyzed_at: r.analyzed_at,
+      raw_input: (r as { raw_input?: string | null }).raw_input ?? null,
+      warnings: (r as { warnings?: string[] }).warnings ?? [],
+      skill_notes: {
+        technical: (r as { technical_note?: string | null }).technical_note ?? null,
+        soft: (r as { soft_note?: string | null }).soft_note ?? null,
+        management: (r as { management_note?: string | null }).management_note ?? null,
+      },
+    };
+  });
 }
 
 export async function listMyPortfolios(userId: string): Promise<MyPortfolioRow[]> {

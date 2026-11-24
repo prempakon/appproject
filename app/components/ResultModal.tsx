@@ -1,4 +1,11 @@
 import React, { useRef, useState } from 'react';
+import { AnalysisRadarGrid, CareerMatchBanner, DetectedSkillsCloud } from './AnalysisResultTiers';
+import type { ScoreDimensions } from '../../lib/platform.types';
+
+function clampScore(value: unknown, fallback: number) {
+  const n = typeof value === 'number' ? value : typeof value === 'string' && value.trim() !== '' ? Number(value) : NaN;
+  return Number.isFinite(n) ? Math.min(100, Math.max(0, Math.round(n))) : fallback;
+}
 
 interface ResultModalProps {
   isOpen: boolean;
@@ -8,27 +15,27 @@ interface ResultModalProps {
   analysis?: {
     skills: string[];
     career: string | null;
+    careerEn?: string | null;
+    careerCategory?: string | null;
     accuracy: number;
     technical: number;
     soft: number;
     management: number;
+    radarScores?: Partial<ScoreDimensions> | null;
     recommendations: { title: string; detail: string }[];
     warnings?: string[];
     rawInput?: string | null;
     textWarning?: string | null;
     model?: string | null;
-    skillNotes?: { technical: string | null; soft: string | null; management: string | null };
+    skillNotes?: {
+      technical: string | null;
+      soft: string | null;
+      management: string | null;
+      communication?: string | null;
+      creativity?: string | null;
+    };
   } | null;
 }
-
-const CAREER_TH: Record<string, string> = {
-  'Software Engineer': 'วิศวกรซอฟต์แวร์',
-  'Data Scientist': 'นักวิทยาศาสตร์ข้อมูล',
-  'UX Designer': 'นักออกแบบประสบการณ์ผู้ใช้',
-  'Cybersecurity Analyst': 'นักวิเคราะห์ความมั่นคงปลอดภัยไซเบอร์',
-  'Marketing Strategist': 'นักกลยุทธ์การตลาด',
-  'Finance Analyst': 'นักวิเคราะห์การเงิน',
-};
 
 export default function ResultModal({ isOpen, onClose, files, analyzedAt, analysis }: ResultModalProps) {
   const reportRef = useRef<HTMLDivElement>(null);
@@ -52,15 +59,17 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
 
   const skills = analysis.skills;
   const accuracy = analysis.accuracy;
-  const technical = analysis.technical;
-  const soft = analysis.soft;
-  const management = analysis.management;
-  const career = (() => {
-    const raw = (analysis.career ?? '').trim();
-    if (!raw) return 'ยังระบุสายงานไม่ได้';
-    const hit = Object.keys(CAREER_TH).find((k) => k.toLowerCase() === raw.toLowerCase());
-    return hit ? CAREER_TH[hit] : raw;
-  })();
+  const technical = clampScore(analysis.technical, 0);
+  const soft = clampScore(analysis.soft, 0);
+  const management = clampScore(analysis.management, 0);
+  const radarScores: ScoreDimensions = {
+    technical: clampScore(analysis.radarScores?.technical, technical),
+    soft: clampScore(analysis.radarScores?.soft, soft),
+    management: clampScore(analysis.radarScores?.management, management),
+    accuracy: clampScore(analysis.radarScores?.accuracy, clampScore(analysis.accuracy, 0)),
+    communication: clampScore(analysis.radarScores?.communication, Math.round((technical + soft) / 2)),
+    creativity: clampScore(analysis.radarScores?.creativity, Math.round((soft + management) / 2)),
+  };
   const recommendations = analysis.recommendations.length > 0 ? analysis.recommendations : null;
   const warnings = analysis?.warnings && analysis.warnings.length > 0 ? analysis.warnings : null;
   const rawInput = analysis?.rawInput?.trim() ? analysis.rawInput.trim() : null;
@@ -192,84 +201,35 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
             </p>
           )}
           
-          {/* สรุปสายงานที่สอดคล้อง */}
+          {/* สรุปสายงานที่สอดคล้อง — Tier 1 Career Match Banner */}
           <section>
             <h4 className="text-sm font-extrabold text-slate-800 mb-4">สรุปสายงานที่สอดคล้อง</h4>
-            <div className="border border-slate-100 rounded-2xl p-6 flex items-center gap-5 bg-gradient-to-r from-blue-50/80 via-white to-white">
-              <div className="w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-600/25 flex-shrink-0">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-7 h-7">
-                  <path fillRule="evenodd" d="M7.5 5.25a3 3 0 013-3h3a3 3 0 013 3v.205c.933.085 1.857.197 2.774.334 1.454.218 2.476 1.483 2.476 2.917v3.033c0 1.211-.734 2.352-1.936 2.752-1.131.378-2.336.378-3.467 0-1.202-.4-1.936-1.541-1.936-2.752v-.747a8.51 8.51 0 01-3.423 0v.747c0 1.211-.734 2.352-1.936 2.752-1.131.378-2.336.378-3.467 0-1.202-.4-1.936-1.541-1.936-2.752V8.706c0-1.434 1.022-2.7 2.476-2.917A48.716 48.716 0 017.5 5.455V5.25zm3 0a.75.75 0 01.75-.75h3a.75.75 0 01.75.75v.205a48.34 48.34 0 00-4.5 0V5.25z" clipRule="evenodd" />
-                  <path d="M3 15.75v-2.25c0-.99.56-1.897 1.448-2.34l.827-.413a.75.75 0 011.342.342V15a3 3 0 013 3h3a3 3 0 013-3v-3.66a.75.75 0 011.342-.342l.827.413c.888.443 1.448 1.35 1.448 2.34v2.25a2.25 2.25 0 01-2.25 2.25h-11.5a2.25 2.25 0 01-2.25-2.25z" />
-                </svg>
-              </div>
-              <div className="min-w-0">
-                <p className="text-lg font-extrabold text-slate-800 leading-relaxed text-balance">{career}</p>
-                {!analysis.career && (
-                  <p className="text-[11px] text-slate-400 leading-relaxed mt-1">
-                    หลักฐานยังน้อย อัปโหลดใบเซอร์ ทรานสคริปต์ หรืองานโปรเจกต์เพิ่มเพื่อให้ AI แนะนำสายงานได้
-                  </p>
-                )}
-              </div>
-            </div>
+            <CareerMatchBanner
+              career={analysis.career}
+              careerEn={analysis.careerEn}
+              action={
+                <button
+                  onClick={downloadPdf}
+                  disabled={downloading}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-slate-800 disabled:opacity-60"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3.5 h-3.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                  </svg>
+                  {downloading ? 'กำลังสร้าง PDF...' : 'ดาวน์โหลด PDF'}
+                </button>
+              }
+            />
           </section>
 
-          {/* ระดับทักษะรายด้าน */}
+          {/* ระดับทักษะรายด้าน — Tier 2 RadarChart + 6 skill cards */}
           <section>
             <h4 className="text-sm font-extrabold text-slate-800 mb-4">ระดับทักษะรายด้าน</h4>
-            <div className="border border-slate-100 rounded-2xl p-6 bg-slate-50/50">
-              <div className="space-y-4">
-                {/* Bar 1 */}
-                <div>
-                  <div className="flex justify-between text-xs font-bold mb-1.5">
-                    <span className="text-slate-800">ทักษะเฉพาะทาง (Technical)</span>
-                  </div>
-                  <div className="w-full bg-slate-200 rounded-full h-2">
-                    <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${technical}%` }}></div>
-                  </div>
-                  <p className="text-[11px] font-medium text-slate-600 mt-1">{analysis.skillNotes?.technical ?? 'ความเชี่ยวชาญการเขียนโค้ดและระบบ'}</p>
-                </div>
-
-                {/* Bar 2 */}
-                <div>
-                  <div className="flex justify-between text-xs font-bold mb-1.5">
-                    <span className="text-slate-800">ทักษะทั่วไป (Soft Skills)</span>
-                  </div>
-                  <div className="w-full bg-slate-200 rounded-full h-2">
-                    <div className="bg-purple-500 h-2 rounded-full" style={{ width: `${soft}%` }}></div>
-                  </div>
-                  <p className="text-[11px] font-medium text-slate-600 mt-1">{analysis.skillNotes?.soft ?? 'การสื่อสารและการทำงานร่วมกัน'}</p>
-                </div>
-
-                {/* Bar 3 */}
-                <div>
-                  <div className="flex justify-between text-xs font-bold mb-1.5">
-                    <span className="text-slate-800">การบริหารจัดการ (Management)</span>
-                  </div>
-                  <div className="w-full bg-slate-200 rounded-full h-2">
-                    <div className="bg-indigo-500 h-2 rounded-full" style={{ width: `${management}%` }}></div>
-                  </div>
-                  <p className="text-[11px] font-medium text-slate-600 mt-1">{analysis.skillNotes?.management ?? 'การส่งมอบงานและการวางแผน'}</p>
-                </div>
-              </div>
-            </div>
+            <AnalysisRadarGrid scores={radarScores} skillNotes={analysis.skillNotes} chartSize={340} />
           </section>
 
-          {/* ทักษะที่ตรวจพบ */}
-          <section>
-            <div className="flex items-center gap-3 mb-4">
-              <h4 className="text-sm font-extrabold text-slate-800">ทักษะที่ตรวจพบจากเอกสาร</h4>
-              <span className="bg-blue-50 text-blue-600 text-[10px] font-bold px-2 py-0.5 rounded border border-blue-100">{skills.length} ทักษะ</span>
-            </div>
-            <div className="flex flex-wrap gap-2.5">
-              {skills.length > 0 ? (
-                skills.map((skill, i) => (
-                  <span key={`${skill}-${i}`} className="px-3 py-1.5 text-xs font-bold rounded-md bg-blue-50 text-blue-700 border border-blue-100">{skill}</span>
-                ))
-              ) : (
-                <p className="text-xs font-medium text-slate-600">ไม่พบทักษะจากไฟล์ที่ส่ง — ดูรายการไฟล์ที่ AI ไม่นับด้านล่าง</p>
-              )}
-            </div>
-          </section>
+          {/* ทักษะที่ตรวจพบ — Tier 3 Detected Skills Tag Cloud */}
+          <DetectedSkillsCloud skills={skills} />
 
           {/* ข้อมูลประกอบการวิเคราะห์ */}
           {rawInput && (

@@ -3,13 +3,27 @@
 
 export type UserRole = 'student' | 'admin';
 
+export type UserStatus =
+  | 'นักศึกษา / บัณฑิตจบใหม่'
+  | 'พนักงานประจำ / คนทำงาน'
+  | 'ฟรีแลนซ์ / อาชีพอิสระ'
+  | 'ผู้หางาน / บุคคลทั่วไป';
+
+export const USER_STATUS_OPTIONS: { value: UserStatus; label: string }[] = [
+  { value: 'นักศึกษา / บัณฑิตจบใหม่', label: 'นักศึกษา / บัณฑิตจบใหม่' },
+  { value: 'พนักงานประจำ / คนทำงาน', label: 'พนักงานประจำ / คนทำงาน' },
+  { value: 'ฟรีแลนซ์ / อาชีพอิสระ', label: 'ฟรีแลนซ์ / อาชีพอิสระ' },
+  { value: 'ผู้หางาน / บุคคลทั่วไป', label: 'ผู้หางาน / บุคคลทั่วไป' },
+];
+
 export interface Profile {
   id: string;
   email: string;
   name: string;
   avatar_url: string | null;
-  institution: string;
-  major: string;
+  institution: string | null;
+  major: string | null;
+  user_status: UserStatus | null;
   bio: string;
   github_link: string | null;
   role: UserRole;

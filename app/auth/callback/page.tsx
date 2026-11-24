@@ -81,7 +81,7 @@ function CallbackRunner() {
             <p className="text-base font-extrabold text-slate-800">เชื่อม Google ไม่สำเร็จ</p>
             <p className="text-xs font-medium text-slate-500 mt-2">{error}</p>
             <button
-              onClick={() => router.push('/')}
+              onClick={() => router.push('/login')}
               className="mt-6 w-full py-3 rounded-xl bg-[#1c58f6] hover:bg-blue-700 text-white font-bold text-sm transition-all"
             >
               กลับหน้าเข้าสู่ระบบ

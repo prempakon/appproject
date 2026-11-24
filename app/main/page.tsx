@@ -3,11 +3,28 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { Trash2 } from 'lucide-react';
 import ResultModal from '../components/ResultModal'; 
+import { AnalysisRadarGrid, CareerMatchBanner, DetectedSkillsCloud } from '../components/AnalysisResultTiers';
+import { supabase } from '../../lib/supabaseClient';
+import type { ScoreDimensions } from '../../lib/platform.types';
+import {
+  ALL_PORTFOLIO_CATEGORY,
+  MAX_PORTFOLIO_FILE_BYTES,
+  PORTFOLIO_BUCKET,
+  PORTFOLIO_CATEGORIES,
+  PORTFOLIO_CATEGORY_OPTIONS,
+  computeFileSha256,
+  inferPortfolioCategory,
+  isPortfolioCategory,
+  storagePathFromPortfolioUrl,
+  type PortfolioCategory,
+  type PortfolioCategoryFilter,
+} from '../../lib/portfolio';
 
 type UserProfile = {
   name: string;
-  avatar: string;
+  avatar?: string;
   institution?: string;
   major?: string;
   bio?: string;
@@ -21,27 +38,251 @@ type CloudFile = {
   imageUrl: string;
 };
 
-type HistoryItem = {
+type PortfolioRow = {
   id: string;
   title: string;
-  analyzedAt: string;
-  type: string;
-  analysis: {
-    skills: string[];
-    career: string | null;
-    careerEn: string | null;
-    accuracy: number;
-    technical: number;
-    soft: number;
-    management: number;
-    recommendations: { title: string; detail: string }[];
-    warnings: string[];
-    rawInput: string | null;
-    textWarning: string | null;
-    skillNotes: { technical: string | null; soft: string | null; management: string | null };
-    model: string | null;
-  } | null;
+  file_url: string;
+  file_type: string;
+  created_at: string;
+  category?: string | null;
+  file_hash?: string | null;
 };
+
+type SkillAnalysis = {
+  skills: string[];
+  career: string | null;
+  careerEn: string | null;
+  careerCategory: string | null;
+  radarScores: ScoreDimensions;
+  accuracy: number;
+  technical: number;
+  soft: number;
+  management: number;
+  recommendations: { title: string; detail: string }[];
+  warnings: string[];
+  rawInput: string | null;
+  textWarning: string | null;
+  skillNotes: {
+    technical: string | null;
+    soft: string | null;
+    management: string | null;
+    communication?: string | null;
+    creativity?: string | null;
+  };
+  model: string | null;
+};
+
+type AnalysisView = {
+  analysis: SkillAnalysis;
+  files: File[];
+  analyzedAt: string | null;
+  title: string;
+};
+
+type AnalysisHistoryItem = {
+  id: string;
+  portfolioId: string;
+  title: string;
+  analyzedAt: string;
+  skillsLabel: string;
+  analysis: SkillAnalysis;
+};
+
+// หมวดหมู่ + ตัวกรองทั้งหมดมาจาก lib/portfolio.ts (single source of truth)
+const GALLERY_CATEGORIES = PORTFOLIO_CATEGORY_OPTIONS;
+type GalleryCategory = PortfolioCategory;
+const ALL_CATEGORY = ALL_PORTFOLIO_CATEGORY;
+type CategoryFilter = PortfolioCategoryFilter;
+const CATEGORY_FILTERS: readonly CategoryFilter[] = PORTFOLIO_CATEGORIES;
+
+const CATEGORY_STORAGE_KEY = 'lru_portfolio_categories_v1';
+const MAX_FILE_BYTES = MAX_PORTFOLIO_FILE_BYTES;
+
+function inferCategory(title: string, fileType: string): GalleryCategory {
+  return inferPortfolioCategory(title, fileType);
+}
+
+
+function readCategoryMap(): Record<string, GalleryCategory> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(CATEGORY_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return {};
+    const result: Record<string, GalleryCategory> = {};
+    for (const [id, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof value === 'string' && (GALLERY_CATEGORIES as readonly string[]).includes(value)) {
+        result[id] = value as GalleryCategory;
+      }
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+function writeCategoryMap(map: Record<string, GalleryCategory>) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(CATEGORY_STORAGE_KEY, JSON.stringify(map));
+  } catch {
+    // Category persistence is best-effort.
+  }
+}
+
+function asGalleryCategory(value: unknown): GalleryCategory | null {
+  return isPortfolioCategory(value) ? value : null;
+}
+
+const HASH_STORAGE_KEY = 'lru_portfolio_hashes_v1';
+
+function readLocalHashes(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(HASH_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return {};
+    const result: Record<string, string> = {};
+    for (const [id, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof value === 'string') result[id] = value;
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+function writeLocalHash(id: string, hash: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    const map = readLocalHashes();
+    map[id] = hash;
+    window.localStorage.setItem(HASH_STORAGE_KEY, JSON.stringify(map));
+  } catch {
+    // Fallback hash registry is best-effort.
+  }
+}
+
+function extOf(name: string, fallback = 'jpg') {
+  const match = name.toLowerCase().match(/\.([a-z0-9]+)$/);
+  return match ? match[1] : fallback;
+}
+
+function safeStorageName(name: string) {
+  const dot = name.lastIndexOf('.');
+  const base = (dot > 0 ? name.slice(0, dot) : name)
+    .normalize('NFKD')
+    .replace(/[^\w\-.]+/g, '_')
+    .replace(/_+/g, '_')
+    .slice(0, 80) || 'file';
+  const ext = dot > 0 ? name.slice(dot).toLowerCase().replace(/[^.a-z0-9]/g, '') || '.jpg' : '.jpg';
+  return `${base}${ext}`;
+}
+
+function isUniqueViolation(error: unknown) {
+  return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === '23505';
+}
+
+async function fetchPortfolioRows(userId: string): Promise<PortfolioRow[]> {
+  const { data, error } = await supabase
+    .from('portfolios')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as PortfolioRow[];
+}
+
+async function uploadPortfolioRow(
+  userId: string,
+  file: File,
+  hash: string,
+  options: { includeHash: boolean; includeCategory: boolean; category: GalleryCategory },
+) {
+  const path = `${userId}/${Date.now()}-${safeStorageName(file.name)}`;
+  const { error: storageError } = await supabase.storage.from('portfolios').upload(path, file);
+  if (storageError) throw storageError;
+
+  const { data: urlData } = supabase.storage.from('portfolios').getPublicUrl(path);
+  const payload: Record<string, unknown> = {
+    user_id: userId,
+    title: file.name,
+    file_url: urlData.publicUrl,
+    file_type: extOf(file.name, 'PDF').toUpperCase(),
+    file_size: file.size,
+  };
+  if (options.includeHash) payload.file_hash = hash;
+  if (options.includeCategory) payload.category = options.category;
+
+  const { data, error } = await supabase.from('portfolios').insert(payload).select().single();
+  if (error) {
+    try {
+      await supabase.storage.from('portfolios').remove([path]);
+    } catch {
+      // Orphan cleanup is best-effort; the DB error below is the important one.
+    }
+    throw error;
+  }
+  return data as { id: string };
+}
+
+function findDuplicate(rows: PortfolioRow[], localHashes: Record<string, string>, file: File, hash: string) {
+  const byHash = rows.find(
+    (row) => (row.file_hash && row.file_hash === hash) || localHashes[row.id] === hash,
+  );
+  if (byHash) return byHash;
+  const targetName = file.name.trim().toLowerCase();
+  return rows.find((row) => row.title.trim().toLowerCase() === targetName) ?? null;
+}
+
+async function ensurePortfolioHashes(
+  userId: string,
+  rows: PortfolioRow[],
+  includeHash: boolean,
+): Promise<PortfolioRow[]> {
+  const localHashes = readLocalHashes();
+  const next = [...rows];
+  for (let index = 0; index < next.length; index += 1) {
+    const row = next[index];
+    if (row.file_hash || localHashes[row.id] || !row.file_url) continue;
+    try {
+      const res = await fetch(row.file_url);
+      if (!res.ok) continue;
+      const blob = await res.blob();
+      const hash = await computeFileSha256(
+        new File([blob], row.title || 'file.jpg', { type: blob.type || 'image/jpeg' }),
+      );
+      localHashes[row.id] = hash;
+      writeLocalHash(row.id, hash);
+      if (includeHash) {
+        try {
+          await supabase
+            .from('portfolios')
+            .update({ file_hash: hash })
+            .eq('id', row.id)
+            .eq('user_id', userId);
+        } catch {
+          // Backfill is best-effort; the local hash still protects this browser session.
+        }
+      }
+      next[index] = { ...row, file_hash: hash };
+    } catch {
+      // Leave legacy rows untouched when the blob cannot be fetched.
+    }
+  }
+  return next;
+}
+
+function duplicateMessage(fileName: string, category: string) {
+  return `ไฟล์ “${fileName}” มีอยู่แล้วในหมวด “${category}” — ไม่ได้อัปโหลดซ้ำ`;
+}
+
+function toScore100(value: unknown, fallback = 0) {
+  const n = typeof value === 'number' ? value : typeof value === 'string' && value.trim() !== '' ? Number(value) : NaN;
+  return Number.isFinite(n) ? Math.min(100, Math.max(0, Math.round(n))) : fallback;
+}
 
 export default function PortfolioStorage() {
   const router = useRouter();
@@ -52,75 +293,104 @@ export default function PortfolioStorage() {
   const [additionalSkillsText, setAdditionalSkillsText] = useState('');
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [selectedExistingIds, setSelectedExistingIds] = useState<(string | null)[]>([]);
-  const [resultDate, setResultDate] = useState<string | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [batchProgress, setBatchProgress] = useState<string | null>(null);
   const [showResultModal, setShowResultModal] = useState(false);
-  const [isHistoryDropdownOpen, setIsHistoryDropdownOpen] = useState(false);
-  const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
+  const [categoryMap, setCategoryMap] = useState<Record<string, GalleryCategory>>({});
+  const [activeCategory, setActiveCategory] = useState<CategoryFilter>(ALL_CATEGORY);
+  const [uploadCategory, setUploadCategory] = useState<GalleryCategory>('ผลงาน / โปรเจกต์');
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [moveModalIds, setMoveModalIds] = useState<string[]>([]);
+  const [moveModalCategory, setMoveModalCategory] = useState<GalleryCategory | null>(null);
+  const [moveModalBusy, setMoveModalBusy] = useState(false);
+  const [moveModalError, setMoveModalError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
+  const [modalCategory, setModalCategory] = useState<CategoryFilter>(ALL_CATEGORY);
   const [selectedModalFiles, setSelectedModalFiles] = useState<CloudFile[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const galleryFileInputRef = useRef<HTMLInputElement>(null);
   const [gallerySaving, setGallerySaving] = useState(false);
 
   const [userProfile, setUserProfile] = useState<UserProfile>(() => {
-    const fallback = { name: 'User', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150' };
+    const empty: UserProfile = { name: '' };
     try {
       const saved = typeof window === 'undefined' ? null : localStorage.getItem('userProfile');
-      if (saved) return { ...fallback, ...JSON.parse(saved) };
+      if (saved) return { ...empty, ...(JSON.parse(saved) as Partial<UserProfile>) };
     } catch {
       // ใช้ค่าเริ่มต้น
     }
-    return fallback;
+    return empty;
   });
-  const [aiResult, setAiResult] = useState<{
-    skills: string[];
-    career: string | null;
-    careerEn: string | null;
-    accuracy: number;
-    technical: number;
-    soft: number;
-    management: number;
-    recommendations: { title: string; detail: string }[];
-    warnings: string[];
-    rawInput: string | null;
-    textWarning: string | null;
-    skillNotes: { technical: string | null; soft: string | null; management: string | null };
-    model: string | null;
-  } | null>(null);
-  const [myPortfolios, setMyPortfolios] = useState<{ id: string; title: string; file_url: string; file_type: string; created_at: string }[]>([]);
-  const [myHistory, setMyHistory] = useState<{
-    id: string;
-    title: string;
-    analyzedAt: string;
-    skills: string;
-    type: string;
-    analysis: {
-      skills: string[];
-      career: string | null;
-      careerEn: string | null;
-      accuracy: number;
-      technical: number;
-      soft: number;
-      management: number;
-      recommendations: { title: string; detail: string }[];
-      warnings: string[];
-      rawInput: string | null;
-      textWarning: string | null;
-      skillNotes: { technical: string | null; soft: string | null; management: string | null };
-      model: string | null;
+  const [analysisView, setAnalysisView] = useState<AnalysisView | null>(null);
+  const [myPortfolios, setMyPortfolios] = useState<PortfolioRow[]>([]);
+  const [myHistory, setMyHistory] = useState<AnalysisHistoryItem[]>([]);
+  const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [duplicateNotices, setDuplicateNotices] = useState<string[]>([]);
+  const [reuseNotices, setReuseNotices] = useState<string[]>([]);
+  const [categoryNotice, setCategoryNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const schemaCaps = useRef({ hash: false, category: false });
+  const categoryNoticeTimer = useRef<number | null>(null);
+
+  const showCategoryNotice = (type: 'success' | 'error', message: string) => {
+    setCategoryNotice({ type, message });
+    if (categoryNoticeTimer.current) window.clearTimeout(categoryNoticeTimer.current);
+    categoryNoticeTimer.current = window.setTimeout(() => setCategoryNotice(null), 3500);
+  };
+
+  const errText = (err: unknown, fallback: string) => {
+    if (err instanceof Error && err.message) return err.message;
+    if (typeof err === 'object' && err !== null && typeof (err as { message?: unknown }).message === 'string') {
+      return (err as { message: string }).message;
+    }
+    try {
+      const s = JSON.stringify(err);
+      return s && s !== '{}' ? s.slice(0, 300) : fallback;
+    } catch {
+      return fallback;
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (categoryNoticeTimer.current) window.clearTimeout(categoryNoticeTimer.current);
     };
-  }[]>([]);
+  }, []);
 
   const refreshMyPortfolios = async () => {
     try {
       const { getSessionUser } = await import('../../lib/auth');
-      const { listMyPortfolios, listMyAnalyses, getMyProfile } = await import('../../lib/profiles');
+      const { getMyProfile } = await import('../../lib/profiles');
       const user = await getSessionUser();
       if (!user) return;
-      setMyPortfolios(await listMyPortfolios(user.id));
+
+      const rows = await fetchPortfolioRows(user.id);
+      setMyPortfolios(rows);
+
+      // Keep category assignments stable across pages and reloads (DB category wins when present).
+      const stored = readCategoryMap();
+      let changed = false;
+      for (const row of rows) {
+        const dbCategory = asGalleryCategory(row.category);
+        if (dbCategory) {
+          if (stored[row.id] !== dbCategory) {
+            stored[row.id] = dbCategory;
+            changed = true;
+          }
+        } else if (!stored[row.id]) {
+          stored[row.id] = inferCategory(row.title, row.file_type);
+          changed = true;
+        }
+      }
+      if (changed) writeCategoryMap(stored);
+      setCategoryMap({ ...stored });
+
       // โปรไฟล์เอาจาก DB เป็นหลัก (local เป็นแค่สำรอง)
       try {
         const db = await getMyProfile(user.id);
@@ -137,75 +407,217 @@ export default function PortfolioStorage() {
       } catch {
         // เงียบไว้ ใช้ local ต่อ
       }
-      const analyses = await listMyAnalyses(user.id);
-      setMyHistory(analyses.map((a) => ({
-        id: a.id,
-        title: a.portfolio_title,
-        analyzedAt: new Date(a.analyzed_at).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
-        skills: `พบ ${a.skills.length} ทักษะ`,
-        type: 'DB',
-        analysis: {
-          skills: a.skills,
-          career: a.career,
-          careerEn: a.career_en ?? null,
-          accuracy: a.accuracy,
-          technical: a.technical,
-          soft: a.soft,
-          management: a.management,
-          recommendations: a.recommendations,
-          warnings: a.warnings ?? [],
-          rawInput: a.raw_input ?? null,
-          textWarning: null,
-          skillNotes: a.skill_notes ?? { technical: null, soft: null, management: null },
-          model: null,
-        },
-      })));
+
     } catch {
-      // เงียบไว้ ใช้ mock เดิม
+      // เงียบไว้ ใช้ข้อมูลเดิม
     }
   };
 
+  const loadAnalysisHistory = async () => {
+    setHistoryLoading(true);
+    setHistoryError(null);
+    try {
+      const { getSessionUser } = await import('../../lib/auth');
+      const { listMyAnalyses } = await import('../../lib/profiles');
+      const user = await getSessionUser();
+      if (!user) {
+        setMyHistory([]);
+        return;
+      }
+      const analyses = await listMyAnalyses(user.id);
+      setMyHistory(
+        analyses.map((a) => ({
+          id: a.id,
+          portfolioId: a.portfolio_id,
+          title: a.portfolio_title,
+          analyzedAt: new Date(a.analyzed_at).toLocaleString('th-TH', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+          skillsLabel: `พบ ${a.skills.length} ทักษะ`,
+          analysis: {
+            skills: a.skills,
+            career: a.career,
+            careerEn: a.career_en,
+            careerCategory: a.career_category,
+            radarScores: a.radar_scores ?? {
+              technical: a.technical,
+              soft: a.soft,
+              management: a.management,
+              accuracy: a.accuracy,
+              communication: Math.round((a.technical + a.soft) / 2),
+              creativity: Math.round((a.soft + a.management) / 2),
+            },
+            accuracy: a.accuracy,
+            technical: a.technical,
+            soft: a.soft,
+            management: a.management,
+            recommendations: a.recommendations,
+            warnings: a.warnings ?? [],
+            rawInput: a.raw_input ?? null,
+            textWarning: null,
+            skillNotes: a.skill_notes,
+            model: null,
+          },
+        }))
+      );
+    } catch (err) {
+      setMyHistory([]);
+      setHistoryError(errText(err, 'โหลดประวัติการวิเคราะห์ไม่สำเร็จ'));
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const openHistoryDrawer = () => {
+    setIsHistoryDrawerOpen(true);
+    void loadAnalysisHistory();
+  };
+
+  const categoryFor = (file: { id: string; title: string; file_type: string; category?: string | null }): GalleryCategory =>
+    categoryMap[file.id] ?? asGalleryCategory(file.category) ?? inferCategory(file.title, file.file_type);
+
+  const assignCategories = (ids: string[], category: GalleryCategory) => {
+    if (ids.length === 0) return;
+    const map = readCategoryMap();
+    for (const id of ids) map[id] = category;
+    writeCategoryMap(map);
+    setCategoryMap({ ...map });
+  };
+
+  const openMoveModal = (ids: string[]) => {
+    const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+    if (uniqueIds.length === 0) {
+      showCategoryNotice('error', 'กรุณาเลือกรายการก่อนย้ายหมวดหมู่');
+      return;
+    }
+    setMoveModalIds(uniqueIds);
+    setMoveModalCategory(null);
+    setMoveModalError(null);
+    setMoveModalBusy(false);
+  };
+
+  const openSingleMoveModal = (file: PortfolioRow) => {
+    openMoveModal([file.id]);
+  };
+
+  const closeMoveModal = () => {
+    if (moveModalBusy) return;
+    setMoveModalIds([]);
+    setMoveModalCategory(null);
+    setMoveModalError(null);
+  };
+
+  const confirmMoveCategories = async () => {
+    const ids = moveModalIds;
+    const category = moveModalCategory;
+    if (!category || ids.length === 0) return;
+
+    setMoveModalBusy(true);
+    setMoveModalError(null);
+    try {
+      const { getSessionUser } = await import('../../lib/auth');
+      const user = await getSessionUser();
+      if (!user) {
+        setMoveModalIds([]);
+        setMoveModalCategory(null);
+        router.replace('/login?redirect=/main');
+        return;
+      }
+
+      if (schemaCaps.current.category) {
+        const { error: updateError } = await supabase
+          .from('portfolios')
+          .update({ category })
+          .in('id', ids)
+          .eq('user_id', user.id);
+        if (updateError) throw updateError;
+      }
+
+      assignCategories(ids, category);
+      setMoveModalIds([]);
+      setMoveModalCategory(null);
+      showCategoryNotice('success', `ย้าย ${ids.length} รายการไปยังหมวด “${category}” แล้ว`);
+    } catch (err) {
+      setMoveModalError(`ย้ายหมวดหมู่ไม่สำเร็จ: ${errText(err, 'ไม่ทราบสาเหตุ')}`);
+    } finally {
+      setMoveModalBusy(false);
+    }
+  };
+
+  const filteredPortfolios = myPortfolios.filter(
+    (file) => activeCategory === ALL_CATEGORY || categoryFor(file) === activeCategory,
+  );
+
+  // รายการใน modal "เลือกจากคลัง" ใช้ state เดียวกับคลัง → ย้าย/ลบแล้วอัปเดตทันที
+  const modalFiles = myPortfolios.filter(
+    (file) => modalCategory === ALL_CATEGORY || categoryFor(file) === modalCategory,
+  );
+
+  const countByCategory = (category: CategoryFilter) =>
+    category === ALL_CATEGORY
+      ? myPortfolios.length
+      : myPortfolios.filter((file) => categoryFor(file) === category).length;
+
   useEffect(() => {
-    // การ์ดหน้าแรก: ไม่มี session จริงและไม่มี local เดิม กลับไปล็อกอิน
+    let cancelled = false;
+
     (async () => {
       try {
         const { getSessionUser } = await import('../../lib/auth');
         const user = await getSessionUser();
-        if (!user && !localStorage.getItem('userEmail')) {
-          router.push('/');
+        if (cancelled) return;
+
+        if (!user) {
+          router.replace('/login?redirect=/main');
+          return;
         }
+
+        setAuthReady(true);
+
+        // Detect whether the live `portfolios` table already has file_hash / category columns.
+        const [hashProbe, categoryProbe] = await Promise.all([
+          supabase.from('portfolios').select('id,file_hash').limit(1),
+          supabase.from('portfolios').select('id,category').limit(1),
+        ]);
+        if (cancelled) return;
+        schemaCaps.current.hash = !hashProbe.error;
+        schemaCaps.current.category = !categoryProbe.error;
+
+        await refreshMyPortfolios();
       } catch {
-        if (!localStorage.getItem('userEmail')) router.push('/');
+        if (!cancelled) router.replace('/login?redirect=/main');
       }
     })();
-    // โหลดข้อมูลคลังครั้งแรกจาก DB (async fetch คือ external sync ที่ถูกต้องใน effect)
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    refreshMyPortfolios();
-  }, [router]);
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Element;
-      if (!target.closest('#history-dropdown-container')) {
-        setIsHistoryDropdownOpen(false);
-      }
-      if (!target.closest('#profile-dropdown-container')) {
-        setIsProfileDropdownOpen(false);
-      }
+    return () => {
+      cancelled = true;
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [router]);
 
   const openMediaModal = () => {
     setSelectedModalFiles([]);
     setModalError(null);
+    setModalCategory(ALL_CATEGORY);
     setIsMediaModalOpen(true);
   };
 
   useEffect(() => {
     return () => { previewUrls.forEach(url => { if (url.startsWith('blob:')) URL.revokeObjectURL(url); }); };
   }, [previewUrls]);
+
+  useEffect(() => {
+    const handleEscapeKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSelectedIds([]);
+      }
+    };
+    window.addEventListener('keydown', handleEscapeKey);
+    return () => window.removeEventListener('keydown', handleEscapeKey);
+  }, [selectedIds]);
 
   const handleFilesSelected = (files: File[], urls: string[], existingIds: (string | null)[] = []) => {
     setIsMediaModalOpen(false);
@@ -218,26 +630,22 @@ export default function PortfolioStorage() {
   };
 
   const startAIProcessing = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { user: liveUser } } = await supabase.auth.getUser();
+    if (!session?.access_token || !liveUser) {
+      setAnalysisError('ต้องเข้าสู่ระบบก่อนใช้งานฟีเจอร์นี้');
+      return;
+    }
+
+    setAnalysisError(null);
     setUploadStatus('processing');
-    setAiResult(null);
+    setAnalysisView(null);
     setAnalysisError(null);
     setBatchProgress(null);
+    setDuplicateNotices([]);
+    setReuseNotices([]);
     // 1) เรียก Gemini วิเคราะห์ (ไฟล์จริง + ข้อความอาชีพที่สนใจ)
-    let ai: {
-      skills: string[];
-      career: string | null;
-      careerEn: string | null;
-      accuracy: number;
-      technical: number;
-      soft: number;
-      management: number;
-      recommendations: { title: string; detail: string }[];
-      warnings: string[];
-      rawInput: string | null;
-      textWarning: string | null;
-      skillNotes: { technical: string | null; soft: string | null; management: string | null };
-      model: string | null;
-    } | null = null;
+    let ai: SkillAnalysis | null = null;
     // ย่อรูปก่อนส่งให้ AI (ประหยัดโควต้า token + เร็วขึ้น ไฟล์ต้นฉบับยังอัปโหลดเต็มขนาด)
     // เอกสารตัวหนังสือใช้ 1600px เพื่อให้ AI อ่านข้อความในใบเซอร์ได้ชัด
     // หมายเหตุ: Vercel รับ body ได้ไม่เกิน ~4.5MB เลยย่อเหลือ 1024px คุณภาพ 0.8
@@ -280,20 +688,7 @@ export default function PortfolioStorage() {
       const analyzable = selectedFiles.filter((f) => f.size > 0).slice(0, 10);
       const chunks: File[][] = [];
       for (let i = 0; i < analyzable.length; i += 5) chunks.push(analyzable.slice(i, i + 5));
-      const batchResults: {
-        skills: string[];
-        career: string | null;
-        careerEn: string | null;
-        accuracy: number;
-        technical: number;
-        soft: number;
-        management: number;
-        recommendations: { title: string; detail: string }[];
-        warnings: string[];
-        textWarning: string | null;
-        skillNotes: { technical: string | null; soft: string | null; management: string | null };
-        model: string | null;
-      }[] = [];
+      const batchResults: SkillAnalysis[] = [];
       for (const [ci, chunk] of chunks.entries()) {
         if (chunks.length > 1) setBatchProgress(`กำลังวิเคราะห์รอบที่ ${ci + 1}/${chunks.length}...`);
         const form = new FormData();
@@ -304,7 +699,13 @@ export default function PortfolioStorage() {
         for (const f of chunk) {
           form.append('files', await downscaleImage(f), f.name);
         }
-        const res = await fetch('/api/analyze', { method: 'POST', body: form });
+        const res = await fetch('/api/analyze', {
+          method: 'POST',
+          body: form,
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        });
         if (res.status === 413) {
           throw new Error('ไฟล์รวมใหญ่เกินไป ลองลดจำนวนไฟล์ต่อรอบแล้วลองใหม่');
         }
@@ -317,21 +718,33 @@ export default function PortfolioStorage() {
         if (!Array.isArray(data.skills)) {
           throw new Error('AI ตอบกลับไม่ถูกต้อง ลองใหม่อีกครั้ง');
         }
+        const radarIn = (data.radar_scores ?? {}) as Partial<ScoreDimensions>;
+        const technical = toScore100(radarIn.technical, toScore100(data.technical, 0));
+        const soft = toScore100(radarIn.soft, toScore100(data.soft, 0));
+        const management = toScore100(radarIn.management, toScore100(data.management, 0));
+        const accuracy = toScore100(radarIn.accuracy, toScore100(data.accuracy, 0));
+        const communication = toScore100(radarIn.communication, Math.round((technical + soft) / 2));
+        const creativity = toScore100(radarIn.creativity, Math.round((soft + management) / 2));
         batchResults.push({
           skills: data.skills,
           career: data.career ?? null,
           careerEn: typeof data.careerEn === 'string' ? data.careerEn : null,
-          accuracy: data.accuracy ?? 0,
-          technical: data.technical ?? 0,
-          soft: data.soft ?? 0,
-          management: data.management ?? 0,
+          careerCategory: typeof data.career_category === 'string' && data.career_category.trim() ? data.career_category.trim() : null,
+          radarScores: { technical, soft, management, accuracy, communication, creativity },
+          accuracy,
+          technical,
+          soft,
+          management,
           recommendations: Array.isArray(data.recommendations) ? data.recommendations : [],
           warnings: Array.isArray(data.warnings) ? data.warnings : [],
+          rawInput: null,
           textWarning: typeof data.textWarning === 'string' ? data.textWarning : null,
           skillNotes: {
             technical: typeof data.skillNotes?.technical === 'string' ? data.skillNotes.technical : null,
             soft: typeof data.skillNotes?.soft === 'string' ? data.skillNotes.soft : null,
             management: typeof data.skillNotes?.management === 'string' ? data.skillNotes.management : null,
+            communication: typeof data.skillNotes?.communication === 'string' ? data.skillNotes.communication : null,
+            creativity: typeof data.skillNotes?.creativity === 'string' ? data.skillNotes.creativity : null,
           },
           model: typeof data._model === 'string' ? data._model : null,
         });
@@ -348,6 +761,15 @@ export default function PortfolioStorage() {
         }).slice(0, 12),
         career: batchResults.map((r) => r.career).find((c) => !!c) ?? null,
         careerEn: batchResults.map((r) => r.careerEn).find((c) => !!c) ?? null,
+        careerCategory: batchResults.map((r) => r.careerCategory).find((c) => !!c) ?? null,
+        radarScores: {
+          technical: avg(batchResults.map((r) => r.radarScores.technical)),
+          soft: avg(batchResults.map((r) => r.radarScores.soft)),
+          management: avg(batchResults.map((r) => r.radarScores.management)),
+          accuracy: avg(batchResults.map((r) => r.radarScores.accuracy)),
+          communication: avg(batchResults.map((r) => r.radarScores.communication)),
+          creativity: avg(batchResults.map((r) => r.radarScores.creativity)),
+        },
         accuracy: avg(batchResults.map((r) => r.accuracy)),
         technical: avg(batchResults.map((r) => r.technical)),
         soft: avg(batchResults.map((r) => r.soft)),
@@ -360,10 +782,11 @@ export default function PortfolioStorage() {
           technical: batchResults.map((r) => r.skillNotes.technical).find((t) => !!t) ?? null,
           soft: batchResults.map((r) => r.skillNotes.soft).find((t) => !!t) ?? null,
           management: batchResults.map((r) => r.skillNotes.management).find((t) => !!t) ?? null,
+          communication: batchResults.map((r) => r.skillNotes.communication ?? null).find((t) => !!t) ?? null,
+          creativity: batchResults.map((r) => r.skillNotes.creativity ?? null).find((t) => !!t) ?? null,
         },
         model: batchResults.map((r) => r.model).find((m) => !!m) ?? null,
       };
-      setAiResult(ai);
     } catch (err) {
       // AI ล้มเหลว: กลับไปหน้า preview พร้อมข้อความ error — ไม่โชว์ mock ไม่เซฟค่าปลอม
       setUploadStatus('preview');
@@ -372,80 +795,145 @@ export default function PortfolioStorage() {
     }
     // 2) บันทึกผลจริงลง DB (ai เป็น null ไม่ได้แล้วเพราะ return ไปก่อนถ้า AI ล้มเหลว)
     try {
-      const { getSessionUser } = await import('../../lib/auth');
-      const { uploadPortfolioReal, saveAnalysisReal } = await import('../../lib/storage');
-      const user = await getSessionUser();
-      if (user && selectedFiles.length > 0 && ai) {
+      const { saveAnalysisReal } = await import('../../lib/storage');
+      if (selectedFiles.length > 0 && ai) {
+        let rows: PortfolioRow[] = [];
+        try {
+          rows = await fetchPortfolioRows(liveUser.id);
+        } catch {
+          rows = [];
+        }
+        rows = await ensurePortfolioHashes(liveUser.id, rows, schemaCaps.current.hash);
+        const analysisPayload = {
+          skills: ai.skills,
+          career: ai.career,
+          careerEn: ai.careerEn,
+          careerCategory: ai.careerCategory,
+          radarScores: ai.radarScores,
+          accuracy: ai.accuracy,
+          technical: ai.technical,
+          soft: ai.soft,
+          management: ai.management,
+          recommendations: ai.recommendations,
+          rawInput: ai.rawInput,
+          warnings: ai.warnings,
+          skillNotes: ai.skillNotes,
+        };
+        const handledHashes = new Set<string>();
+        const duplicates: string[] = [];
+        const reused: string[] = [];
+
         for (let idx = 0; idx < selectedFiles.length; idx++) {
           const f = selectedFiles[idx];
           const existingId = selectedExistingIds[idx] ?? null;
           try {
             if (existingId) {
-              await saveAnalysisReal(user.id, existingId, {
-                skills: ai.skills,
-                career: ai.career,
-                careerEn: ai.careerEn,
-                accuracy: ai.accuracy,
-                technical: ai.technical,
-                soft: ai.soft,
-                management: ai.management,
-                recommendations: ai.recommendations,
-                rawInput: ai.rawInput,
-                warnings: ai.warnings,
-                skillNotes: ai.skillNotes,
-              });
-            } else if (f.size > 0) {
-              const row = await uploadPortfolioReal(user.id, f);
-              await saveAnalysisReal(user.id, (row as { id: string }).id, {
-                skills: ai.skills,
-                career: ai.career,
-                careerEn: ai.careerEn,
-                accuracy: ai.accuracy,
-                technical: ai.technical,
-                soft: ai.soft,
-                management: ai.management,
-                recommendations: ai.recommendations,
-                rawInput: ai.rawInput,
-                warnings: ai.warnings,
-                skillNotes: ai.skillNotes,
-              });
+              await saveAnalysisReal(liveUser.id, existingId, analysisPayload);
+              continue;
             }
-          } catch {
+
+            if (f.size <= 0) continue;
+
+            const hash = await computeFileSha256(f);
+
+            if (handledHashes.has(hash)) {
+              duplicates.push(`ไฟล์ “${f.name}” ซ้ำกับไฟล์อื่นในชุดที่เลือก — วิเคราะห์ครั้งเดียวพอ`);
+              continue;
+            }
+            handledHashes.add(hash);
+
+            // ไฟล์นี้มีอยู่ในคลังแล้ว (hash หรือชื่อไฟล์ตรงกัน) → ใช้รายการเดิม ไม่ insert แถวซ้ำ
+            const localHashes = readLocalHashes();
+            const existing = findDuplicate(rows, localHashes, f, hash);
+            if (existing) {
+              await saveAnalysisReal(liveUser.id, existing.id, analysisPayload);
+              reused.push(
+                `“${f.name}” มีอยู่ในคลังแล้ว (หมวด “${categoryFor(existing)}”) — ใช้ไฟล์เดิมในการวิเคราะห์`,
+              );
+              continue;
+            }
+
+            const row = await uploadPortfolioRow(liveUser.id, f, hash, {
+              includeHash: schemaCaps.current.hash,
+              includeCategory: schemaCaps.current.category,
+              category: uploadCategory,
+            });
+            if (!schemaCaps.current.hash) writeLocalHash(row.id, hash);
+
+            assignCategories([row.id], uploadCategory);
+            rows = [
+              {
+                id: row.id,
+                title: f.name,
+                file_url: '',
+                file_type: extOf(f.name, 'PDF').toUpperCase(),
+                created_at: new Date().toISOString(),
+                file_hash: schemaCaps.current.hash ? hash : null,
+                category: uploadCategory,
+              },
+              ...rows,
+            ];
+
+            await saveAnalysisReal(liveUser.id, row.id, analysisPayload);
+          } catch (err) {
+            if (isUniqueViolation(err)) {
+              let conflict: PortfolioRow | null = null;
+              try {
+                const freshRows = await fetchPortfolioRows(liveUser.id);
+                rows = freshRows;
+                conflict = findDuplicate(freshRows, readLocalHashes(), f, await computeFileSha256(f));
+              } catch {
+                conflict = null;
+              }
+              if (conflict) {
+                // unique constraint ชนะการเช็คของเรา → ใช้แถวที่มีอยู่แล้วแทนการเพิ่มซ้ำ
+                try {
+                  await saveAnalysisReal(liveUser.id, conflict.id, analysisPayload);
+                  reused.push(
+                    `“${f.name}” มีอยู่ในคลังแล้ว (หมวด “${categoryFor(conflict)}”) — ใช้ไฟล์เดิมในการวิเคราะห์`,
+                  );
+                } catch {
+                  duplicates.push(duplicateMessage(f.name, categoryFor(conflict)));
+                }
+              } else {
+                duplicates.push(duplicateMessage(f.name, uploadCategory));
+              }
+            }
             // ไฟล์เดียวพัง ข้ามไปไฟล์ต่อไป
           }
         }
+
+        setDuplicateNotices(duplicates);
+        setReuseNotices(reused);
       }
     } catch {
-      // เซฟ DB พังก็ยังโชว์ผลจริงใน modal ได้
+      showCategoryNotice('error', 'บันทึกผลการวิเคราะห์ลงคลังไม่สำเร็จ — ยังดูผลวิเคราะห์ได้ตามปกติ');
+    }
+    const analyzedAt = new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' });
+    if (ai) {
+      setAnalysisView({
+        analysis: ai,
+        files: selectedFiles,
+        analyzedAt,
+        title: selectedFiles.length > 1 ? `${selectedFiles.length} ไฟล์` : selectedFiles[0]?.name ?? 'ผลการวิเคราะห์',
+      });
     }
     setUploadStatus('success');
-    setResultDate(new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' }));
     setShowResultModal(true);
     refreshMyPortfolios();
-  };
-
-  const openHistoryModal = (fileData: HistoryItem) => {
-    const mockFile = new File([''], fileData.title, { type: fileData.type === 'PDF' ? 'application/pdf' : 'image/jpeg' });
-    setSelectedFiles([mockFile]);
-    setSelectedExistingIds([null]);
-    // ถ้าเป็นประวัติจริง ส่งผลวิเคราะห์จริงเข้า modal ด้วย
-    if (fileData.analysis) {
-      setAiResult(fileData.analysis);
-    } else {
-      setAiResult(null);
-    }
-    setResultDate(fileData.analyzedAt ?? null);
-    setShowResultModal(true);
-    setIsHistoryDropdownOpen(false);
+    void loadAnalysisHistory();
   };
 
   const handleLocalFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const filesArray = Array.from(e.target.files);
-      const validFiles = filesArray.filter((f) => f.size <= 10 * 1024 * 1024);
+      const validFiles = filesArray.filter((f) => f.size <= MAX_FILE_BYTES);
       if (validFiles.length > 0) {
         const urls = validFiles.map(f => URL.createObjectURL(f));
         handleFilesSelected(validFiles, urls);
+      } else {
+        setDropError('ไฟล์ใหญ่เกิน 5MB ไม่รองรับ');
+        setTimeout(() => setDropError(''), 5000);
       }
     }
   };
@@ -456,6 +944,29 @@ export default function PortfolioStorage() {
     setSelectedModalFiles((prev) => {
       const isAlreadySelected = prev.some((f) => f.id === fileData.id);
       return isAlreadySelected ? prev.filter((f) => f.id !== fileData.id) : [...prev, fileData];
+    });
+  };
+
+  // เลือกทั้งหมวดที่กำลังดูอยู่ (ใน modal) เพื่อนำไปวิเคราะห์ทีเดียว
+  const selectAllInModalCategory = () => {
+    const cards: CloudFile[] = modalFiles.map((p) => ({
+      id: `db-${p.id}`,
+      title: p.title,
+      type: p.file_type,
+      imageUrl: p.file_url,
+    }));
+    if (cards.length === 0) return;
+
+    setSelectedModalFiles((prev) => {
+      const allSelected = cards.every((card) => prev.some((f) => f.id === card.id));
+      if (allSelected) {
+        return prev.filter((f) => !cards.some((card) => card.id === f.id));
+      }
+      const merged = [...prev];
+      for (const card of cards) {
+        if (!merged.some((f) => f.id === card.id)) merged.push(card);
+      }
+      return merged;
     });
   };
 
@@ -527,7 +1038,7 @@ export default function PortfolioStorage() {
       const res = await fetch(imageUrl);
       if (!res.ok) return null;
       const blob = await res.blob();
-      if (blob.size > 10 * 1024 * 1024) return null;
+      if (blob.size > MAX_FILE_BYTES) return null;
       return new File([blob], title || 'gallery-image.jpg', { type: blob.type || 'image/jpeg' });
     } catch {
       return null;
@@ -583,12 +1094,12 @@ export default function PortfolioStorage() {
       setTimeout(() => setDropError(''), 5000);
       return;
     }
-    const validFiles = filesArray.filter((f) => f.size <= 10 * 1024 * 1024);
+    const validFiles = filesArray.filter((f) => f.size <= MAX_FILE_BYTES);
     if (validFiles.length > 0) {
       const urls = validFiles.map(f => URL.createObjectURL(f));
       handleFilesSelected(validFiles, urls);
     } else {
-      setDropError('ไฟล์ใหญ่เกิน 10MB ไม่รองรับ');
+      setDropError('ไฟล์ใหญ่เกิน 5MB ไม่รองรับ');
       setTimeout(() => setDropError(''), 5000);
     }
   };
@@ -599,49 +1110,93 @@ export default function PortfolioStorage() {
   // เพิ่มรูปจากเครื่องสู่คลังโดยตรง (ไม่ผ่านขั้นตอนวิเคราะห์)
   const [galleryError, setGalleryError] = useState<string | null>(null);
 
-  const errText = (err: unknown, fallback: string) => {
-    if (err instanceof Error && err.message) return err.message;
-    if (typeof err === 'object' && err !== null && typeof (err as { message?: unknown }).message === 'string') {
-      return (err as { message: string }).message;
-    }
-    try {
-      const s = JSON.stringify(err);
-      return s && s !== '{}' ? s.slice(0, 300) : fallback;
-    } catch {
-      return fallback;
-    }
-  };
-
   const handleGalleryDirectSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
-    const filesArray = Array.from(e.target.files).filter((f) => f.size <= 10 * 1024 * 1024);
+    const filesArray = Array.from(e.target.files).filter((f) => f.size <= MAX_FILE_BYTES);
     if (filesArray.length === 0) {
-      setGalleryError('ไฟล์ใหญ่เกิน 10MB ไม่รองรับ');
+      setGalleryError('ไฟล์ใหญ่เกิน 5MB ไม่รองรับ');
       return;
     }
     setGallerySaving(true);
     setGalleryError(null);
+    setDuplicateNotices([]);
     try {
       const { getSessionUser } = await import('../../lib/auth');
-      const { uploadPortfolioReal } = await import('../../lib/storage');
       const user = await getSessionUser();
       if (!user) {
         setGalleryError('ยังไม่ได้เข้าสู่ระบบจริง (บัญชีทดลอง) — ออกจากระบบแล้วสมัคร/เข้าสู่ระบบด้วยอีเมลรหัสผ่านก่อนเพิ่มรูป');
         return;
       }
+
+      let rows = await fetchPortfolioRows(user.id);
+      rows = await ensurePortfolioHashes(user.id, rows, schemaCaps.current.hash);
+      const localHashes = readLocalHashes();
+      const batchHashes = new Set<string>();
+      const duplicates: string[] = [];
       let failed = 0;
       let firstErr = '';
+      const newIds: string[] = [];
+
       for (const f of filesArray) {
         try {
-          await uploadPortfolioReal(user.id, f);
+          const hash = await computeFileSha256(f);
+
+          if (batchHashes.has(hash)) {
+            duplicates.push(`ไฟล์ “${f.name}” ซ้ำกับไฟล์อื่นในชุดที่เลือก — ไม่ได้อัปโหลดซ้ำ`);
+            continue;
+          }
+
+          const duplicate = findDuplicate(rows, localHashes, f, hash);
+          if (duplicate) {
+            duplicates.push(duplicateMessage(f.name, categoryFor(duplicate)));
+            continue;
+          }
+
+          batchHashes.add(hash);
+          const row = await uploadPortfolioRow(user.id, f, hash, {
+            includeHash: schemaCaps.current.hash,
+            includeCategory: schemaCaps.current.category,
+            category: uploadCategory,
+          });
+          if (!schemaCaps.current.hash) writeLocalHash(row.id, hash);
+          newIds.push(row.id);
+          rows = [
+            {
+              id: row.id,
+              title: f.name,
+              file_url: '',
+              file_type: extOf(f.name, 'PDF').toUpperCase(),
+              created_at: new Date().toISOString(),
+              file_hash: schemaCaps.current.hash ? hash : null,
+              category: uploadCategory,
+            },
+            ...rows,
+          ];
         } catch (err) {
-          if (!firstErr) firstErr = errText(err, 'ไม่ทราบสาเหตุ');
-          failed++;
+          if (isUniqueViolation(err)) {
+            let conflict: PortfolioRow | null = null;
+            try {
+              const freshRows = await fetchPortfolioRows(user.id);
+              conflict = findDuplicate(freshRows, readLocalHashes(), f, await computeFileSha256(f));
+            } catch {
+              conflict = null;
+            }
+            duplicates.push(duplicateMessage(f.name, conflict ? categoryFor(conflict) : uploadCategory));
+          } else {
+            if (!firstErr) firstErr = errText(err, 'ไม่ทราบสาเหตุ');
+            failed++;
+          }
         }
       }
+
+      if (newIds.length > 0) {
+        assignCategories(newIds, uploadCategory);
+        setActiveCategory(uploadCategory);
+      }
+      setDuplicateNotices(duplicates);
       if (failed > 0) {
         setGalleryError(
-          `เพิ่มได้บางไฟล์ (${filesArray.length - failed}/${filesArray.length}) ที่เหลืออัปโหลดไม่สำเร็จ` +
+          `เพิ่มได้บางไฟล์ (${filesArray.length - failed - duplicates.length}/${filesArray.length}) ที่เหลืออัปโหลดไม่สำเร็จ` +
           (firstErr ? ` — สาเหตุ: ${firstErr}` : ''),
         );
       }
@@ -654,33 +1209,294 @@ export default function PortfolioStorage() {
     }
   };
 
+  const removeLocalFiles = (ids: string[]) => {
+    if (ids.length === 0) return;
+    setMyPortfolios((prev) => prev.filter((file) => !ids.includes(file.id)));
+    setCategoryMap((prev) => {
+      const next = { ...prev };
+      for (const id of ids) delete next[id];
+      return next;
+    });
+    const stored = readCategoryMap();
+    for (const id of ids) delete stored[id];
+    writeCategoryMap(stored);
+    setGallerySelected((prev) => prev.filter((item) => {
+      const realId = dbIdOf(item.id);
+      return !realId || !ids.includes(realId);
+    }));
+    setSelectedModalFiles((prev) => prev.filter((item) => {
+      const realId = dbIdOf(item.id);
+      return !realId || !ids.includes(realId);
+    }));
+    setSelectedIds((prev) => prev.filter((id) => !ids.includes(id)));
+  };
+
+  const deletePortfolioFile = async (userId: string, file: PortfolioRow) => {
+    const { error: rowError } = await supabase
+      .from('portfolios')
+      .delete()
+      .eq('id', file.id)
+      .eq('user_id', userId);
+    if (rowError) throw rowError;
+
+    const path = storagePathFromPortfolioUrl(file.file_url);
+    if (path) {
+      const { error: storageError } = await supabase.storage.from(PORTFOLIO_BUCKET).remove([path]);
+      if (storageError) {
+        throw new Error(`ลบข้อมูลแล้วแต่ลบไฟล์ใน Storage ไม่สำเร็จ: ${storageError.message}`);
+      }
+    }
+  };
+
+  const handleDeletePortfolio = async (file: PortfolioRow) => {
+    if (!window.confirm(
+      `ต้องการลบ “${file.title}” ออกจากคลังหรือไม่?\nการลบจะลบทั้งข้อมูลและไฟล์จริงและไม่สามารถย้อนกลับได้`,
+    )) {
+      return;
+    }
+
+    setBusyId(file.id);
+    try {
+      const { getSessionUser } = await import('../../lib/auth');
+      const user = await getSessionUser();
+      if (!user) {
+        router.replace('/login?redirect=/main');
+        return;
+      }
+      await deletePortfolioFile(user.id, file);
+      removeLocalFiles([file.id]);
+      showCategoryNotice('success', `ลบ “${file.title}” แล้ว`);
+    } catch (err) {
+      showCategoryNotice('error', `ลบไฟล์ไม่สำเร็จ: ${errText(err, 'ไม่ทราบสาเหตุ')}`);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const resetUpload = () => {
     setSelectedFiles([]);
     setPreviewUrls([]);
     setSelectedExistingIds([]);
-    setResultDate(null);
     setAnalysisError(null);
     setBatchProgress(null);
-    setAiResult(null);
+    setAnalysisView(null);
     setAdditionalSkillsText('');
     setUploadStatus('idle');
     setShowResultModal(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const analysisViewForHistory = (item: AnalysisHistoryItem): AnalysisView => ({
+    analysis: item.analysis,
+    files: [new File([''], item.title, { type: 'application/octet-stream' })],
+    analyzedAt: item.analyzedAt,
+    title: item.title,
+  });
+
+  const selectHistoryItem = (item: AnalysisHistoryItem) => {
+    setAnalysisView(analysisViewForHistory(item));
+    setIsHistoryDrawerOpen(false);
+  };
+
+  const openHistoryFullModal = (item: AnalysisHistoryItem) => {
+    setAnalysisView(analysisViewForHistory(item));
+    setShowResultModal(true);
+    setIsHistoryDrawerOpen(false);
+  };
+
+  const toggleSelectedId = (id: string) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
+  };
+
+  const selectAllVisibleItems = () => {
+    const visibleIds = filteredPortfolios.slice(0, 6).map((file) => file.id);
+    setSelectedIds((prev) => Array.from(new Set([...prev, ...visibleIds])));
+  };
+
+  const openBatchMoveModalWithSelectedIds = () => {
+    const ids = selectedIds.filter((id): id is string => !!id);
+    if (ids.length > 0) {
+      openMoveModal(ids);
+    }
+  };
+
+  const confirmDeleteSelectedIds = async () => {
+    if (selectedIds.length === 0) return;
+    const targets = myPortfolios.filter((file) => selectedIds.includes(file.id));
+    if (targets.length === 0) {
+      showCategoryNotice('error', 'กรุณาเลือกรายการก่อนลบ');
+      return;
+    }
+    if (!window.confirm(
+      `ต้องการลบ ${targets.length} รายการที่เลือกหรือไม่?\nการลบจะลบทั้งข้อมูลและไฟล์จริงและไม่สามารถย้อนกลับได้`,
+    )) {
+      return;
+    }
+    setBatchBusy(true);
+    try {
+      const { getSessionUser } = await import('../../lib/auth');
+      const user = await getSessionUser();
+      if (!user) {
+        router.replace('/login?redirect=/main');
+        return;
+      }
+      const deleted: string[] = [];
+      let failed = 0;
+      let firstError = '';
+      for (const file of targets) {
+        try {
+          await deletePortfolioFile(user.id, file);
+          deleted.push(file.id);
+        } catch (err) {
+          failed += 1;
+          if (!firstError) firstError = errText(err, 'ไม่ทราบสาเหตุ');
+        }
+      }
+      if (deleted.length > 0) removeLocalFiles(deleted);
+      if (failed > 0) {
+        showCategoryNotice('error', `ลบสำเร็จ ${deleted.length}/${targets.length} รายการ — ${firstError}`);
+      } else {
+        showCategoryNotice('success', `ลบ ${deleted.length} รายการออกจากคลังแล้ว`);
+      }
+      setSelectedIds([]);
+    } catch (err) {
+      showCategoryNotice('error', `ลบไฟล์ไม่สำเร็จ: ${errText(err, 'ไม่ทราบสาเหตุ')}`);
+    } finally {
+      setBatchBusy(false);
+    }
+  };
+
+  const clearSelectedIds = () => {
+    setSelectedIds([]);
+    // Also close Escape key handling by resetting state
+  };
+
+  if (!authReady) {
+    return (
+      <main className="flex min-h-[60vh] items-center justify-center bg-[#f8f9fa]">
+        <p className="text-sm font-bold text-slate-500">กำลังตรวจสอบสิทธิ์การเข้าใช้งาน...</p>
+      </main>
+    );
+  }
+
+  const activeAnalysis = analysisView?.analysis ?? null;
+  const activeRadarScores = activeAnalysis?.radarScores ?? null;
+
   return (
     <main className="min-h-screen bg-[#f8f9fa] text-slate-800 font-sans relative overflow-x-hidden flex flex-col">
       <input type="file" multiple ref={fileInputRef} onChange={handleLocalFileSelect} accept=".pdf,.jpg,.jpeg,.png" className="hidden" />
       <input type="file" multiple ref={galleryFileInputRef} onChange={handleGalleryDirectSelect} accept=".pdf,.jpg,.jpeg,.png" className="hidden" />
 
-      <ResultModal isOpen={showResultModal} onClose={() => setShowResultModal(false)} files={selectedFiles} analysis={aiResult} analyzedAt={resultDate} />
+      <ResultModal
+        isOpen={showResultModal}
+        onClose={() => setShowResultModal(false)}
+        files={analysisView?.files ?? []}
+        analysis={analysisView?.analysis ?? null}
+        analyzedAt={analysisView?.analyzedAt ?? null}
+      />
+
+      {/* SLIDE-OVER DRAWER: ประวัติการวิเคราะห์ */}
+      {isHistoryDrawerOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <button
+            type="button"
+            aria-label="ปิดประวัติการวิเคราะห์"
+            onClick={() => setIsHistoryDrawerOpen(false)}
+            className="absolute inset-0 cursor-default"
+          />
+          <aside className="relative flex h-full w-full max-w-md flex-col bg-white shadow-2xl animate-in slide-in-from-right duration-300">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <div>
+                <h3 className="text-lg font-black text-slate-900">ประวัติการวิเคราะห์</h3>
+                <p className="text-xs font-medium text-slate-500">ผลวิเคราะห์ 20 รายการล่าสุดจาก Supabase</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsHistoryDrawerOpen(false)}
+                className="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                aria-label="ปิด"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4">
+              {historyLoading ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <div className="mb-4 h-10 w-10 animate-spin rounded-full border-4 border-slate-100 border-t-blue-600" />
+                  <p className="text-sm font-bold text-slate-600">กำลังโหลดประวัติการวิเคราะห์...</p>
+                </div>
+              ) : historyError ? (
+                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-4 text-center">
+                  <p className="text-sm font-bold text-red-700">⚠ {historyError}</p>
+                  <button
+                    type="button"
+                    onClick={() => void loadAnalysisHistory()}
+                    className="mt-3 rounded-full bg-red-600 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-red-700"
+                  >
+                    ลองใหม่
+                  </button>
+                </div>
+              ) : myHistory.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center">
+                  <p className="text-sm font-bold text-slate-600">ยังไม่มีประวัติการวิเคราะห์</p>
+                  <p className="mt-1 text-xs font-medium text-slate-400">อัปโหลดผลงานแล้วกด “ให้ AI วิเคราะห์ทักษะ” เพื่อสร้างประวัติแรก</p>
+                </div>
+              ) : (
+                <ul className="space-y-3">
+                  {myHistory.map((item) => {
+                    const a = item.analysis;
+                    const careerLabel = a.career ?? a.careerEn ?? 'ไม่ระบุสายงาน';
+                    return (
+                      <li key={item.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
+                        <button type="button" onClick={() => selectHistoryItem(item)} className="block w-full text-left">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-black text-slate-900">{item.title}</p>
+                              <p className="mt-0.5 truncate text-xs font-bold text-blue-700">{careerLabel}</p>
+                            </div>
+                            <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-700">{item.skillsLabel}</span>
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-1.5 text-[10px] font-bold">
+                            <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-600">เทคนิค {a.radarScores.technical}/100</span>
+                            <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-600">ทั่วไป {a.radarScores.soft}/100</span>
+                            <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-600">บริหาร {a.radarScores.management}/100</span>
+                            <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-600">แม่นยำ {a.radarScores.accuracy}/100</span>
+                          </div>
+                          <p className="mt-2 flex items-center gap-1 text-[11px] font-medium text-slate-400">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            {item.analyzedAt}
+                          </p>
+                        </button>
+                        <div className="mt-3 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => openHistoryFullModal(item)}
+                            className="rounded-full border border-slate-200 px-3 py-1.5 text-[11px] font-bold text-slate-600 transition-colors hover:border-blue-300 hover:text-blue-700"
+                          >
+                            ดูฉบับเต็ม →
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </aside>
+        </div>
+      )}
 
       {/* MODAL เลือกไฟล์จากคลาวด์ */}
       {isMediaModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-4xl rounded-[2rem] shadow-2xl overflow-hidden flex flex-col h-[700px] max-h-[90vh]">
             <div className="px-6 pt-6 border-b border-slate-100 bg-white">
-              <div className="flex justify-between items-center mb-6">
+              <div className="flex justify-between items-center mb-4">
                 <div>
                   <h3 className="text-2xl font-extrabold text-slate-800">เลือกไฟล์จากคลาวด์</h3>
                   <p className="text-slate-500 text-sm mt-1">ดึงผลงานเดิมที่คุณเคยอัปโหลดไว้ มาวิเคราะห์ซ้ำได้ทันที (เลือกได้หลายไฟล์)</p>
@@ -689,14 +1505,62 @@ export default function PortfolioStorage() {
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
+
+              <div className="flex flex-wrap gap-2 pb-4">
+                {CATEGORY_FILTERS.map((category) => {
+                  const count = countByCategory(category);
+                  const active = modalCategory === category;
+                  return (
+                    <button
+                      key={category}
+                      type="button"
+                      onClick={() => setModalCategory(category)}
+                      className={`rounded-full border px-3 py-1.5 text-[11px] font-extrabold transition-colors ${
+                        active
+                          ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-blue-700'
+                      }`}
+                    >
+                      {category} <span className={active ? 'text-blue-100' : 'text-slate-400'}>({count})</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="p-6 overflow-y-auto flex-grow bg-slate-50/50 relative">
-              {myPortfolios.length > 0 ? (
+              <div className="mb-4 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={selectAllInModalCategory}
+                  disabled={modalFiles.length === 0}
+                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-extrabold text-slate-600 transition-colors hover:border-blue-300 hover:text-blue-700 disabled:opacity-50"
+                >
+                  เลือกทั้งหมดในหมวดนี้ ({modalFiles.length})
+                </button>
+                {selectedModalFiles.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedModalFiles([])}
+                    className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-extrabold text-slate-500 transition-colors hover:border-red-200 hover:text-red-600"
+                  >
+                    ล้างที่เลือก ({selectedModalFiles.length})
+                  </button>
+                )}
+              </div>
+
+              {myPortfolios.length === 0 ? (
+                <p className="py-16 text-sm font-bold text-slate-400 text-center">ยังไม่มีไฟล์ในคลัง<br />เพิ่มรูปจากเครื่องก่อน แล้วค่อยกลับมาเลือกที่นี่</p>
+              ) : modalFiles.length === 0 ? (
+                <p className="py-16 text-sm font-bold text-slate-400 text-center">
+                  ยังไม่มีไฟล์ในหมวด “{modalCategory}”<br />เลือกหมวดอื่น หรือย้ายไฟล์เข้าหมวดนี้ก่อน
+                </p>
+              ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-20">
-                {myPortfolios.map((p) => {
+                {modalFiles.map((p) => {
                   const file = { id: `db-${p.id}`, title: p.title, type: p.file_type, imageUrl: p.file_url };
                   const isSelected = selectedModalFiles.some((f) => f.id === file.id);
+                  const category = categoryFor(p);
                   return (
                     <div key={file.id} onClick={() => toggleGallerySelection(file)} className={`group cursor-pointer bg-white rounded-xl border-2 transition-all overflow-hidden relative ${isSelected ? 'border-blue-500 shadow-md ring-2 ring-blue-500/20' : 'border-slate-200 hover:border-blue-300'}`}>
                       {isSelected && (
@@ -706,6 +1570,11 @@ export default function PortfolioStorage() {
                       )}
                       <div className="aspect-[4/3] relative overflow-hidden bg-slate-100">
                         <div className="absolute top-2 left-2 z-10 bg-white/95 px-2 py-1 rounded text-[10px] font-extrabold text-slate-800 shadow-sm">{file.type}</div>
+                        <div className="absolute bottom-2 left-2 right-2 z-10">
+                          <span className="inline-block max-w-full truncate rounded-full bg-slate-900/80 px-2 py-1 text-[10px] font-extrabold text-white backdrop-blur">
+                            {category}
+                          </span>
+                        </div>
                         {/^(JPG|JPEG|PNG|GIF|WEBP)$/i.test(file.type) ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img src={file.imageUrl} alt={file.title} className={`w-full h-full object-cover transition-transform duration-500 ${isSelected ? 'scale-105 opacity-90' : 'group-hover:scale-105'}`} />
@@ -724,8 +1593,6 @@ export default function PortfolioStorage() {
                   );
                 })}
               </div>
-              ) : (
-                <p className="py-16 text-sm font-bold text-slate-400 text-center">ยังไม่มีไฟล์ในคลัง<br />เพิ่มรูปจากเครื่องก่อน แล้วค่อยกลับมาเลือกที่นี่</p>
               )}
               {modalError && (
                 <p className="mb-4 text-xs font-bold text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-center">⚠ {modalError}</p>
@@ -741,142 +1608,118 @@ export default function PortfolioStorage() {
         </div>
       )}
 
-      {/* ================= NAVBAR / HEADER ================= */}
-      <header className="w-full bg-white/85 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-40 shadow-[0_1px_12px_rgba(15,23,42,0.05)]">
-        <div className="max-w-7xl mx-auto px-4 md:px-8 py-4 flex justify-between items-center">
-          <div className="text-2xl font-black text-blue-600 tracking-tight flex items-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-7 h-7">
-              <path d="M19.5 21a3 3 0 003-3v-4.5a3 3 0 00-3-3h-15a3 3 0 00-3 3V18a3 3 0 003 3h15zM1.5 10.146V6a3 3 0 013-3h5.379a2.25 2.25 0 011.59.659l2.122 2.121c.14.141.331.22.53.22H19.5a3 3 0 013 3v1.146A4.483 4.483 0 0019.5 9h-15a4.483 4.483 0 00-3 1.146z" />
-            </svg>
-            Port<span className="text-slate-800">Folio</span>
-          </div>
-          
-          <div className="flex items-center gap-4 sm:gap-6">
-            
-            {/* Dropdown ประวัติการวิเคราะห์ */}
-            <div id="history-dropdown-container" className="relative hidden sm:block">
-              <button 
-                onClick={() => setIsHistoryDropdownOpen(!isHistoryDropdownOpen)}
-                className={`flex items-center gap-2 text-sm font-bold transition-colors ${isHistoryDropdownOpen ? 'text-blue-600' : 'text-slate-600 hover:text-blue-600'}`}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                ดูประวัติการวิเคราะห์
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-4 h-4 transition-transform ${isHistoryDropdownOpen ? 'rotate-180' : ''}`}>
-                  <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
-                </svg>
-              </button>
-
-              {isHistoryDropdownOpen && (
-                <div className="absolute right-0 mt-4 w-80 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
-                  <div className="bg-slate-50 border-b border-slate-100 px-4 py-3">
-                    <h4 className="font-extrabold text-slate-800 text-sm">ประวัติการวิเคราะห์ (ล่าสุด)</h4>
-                  </div>
-                  <div className="max-h-72 overflow-y-auto custom-scrollbar">
-                    {myHistory.length > 0 ? (
-                      myHistory.map((file) => (
-                        <div key={file.id} onClick={() => openHistoryModal(file)} className="px-4 py-3.5 border-b border-slate-50 hover:bg-blue-50/50 cursor-pointer transition-colors flex flex-col gap-1.5 group">
-                          <div className="flex justify-between items-start gap-2">
-                            <p className="text-sm font-bold text-slate-800 truncate group-hover:text-blue-700 transition-colors">{file.title}</p>
-                            <span className="text-[10px] font-bold text-blue-600 bg-blue-100 px-2 py-0.5 rounded flex-shrink-0">{file.skills}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-xs font-medium text-slate-400">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                            {file.analyzedAt}
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="px-4 py-8 text-xs font-medium text-slate-400 text-center">ยังไม่มีประวัติการวิเคราะห์<br />วิเคราะห์ไฟล์เพื่อสร้างประวัติของตัวเอง</p>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Profile Dropdown */}
-            <div id="profile-dropdown-container" className="relative">
+      {moveModalIds.length > 0 && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/55 p-4 backdrop-blur-sm"
+          onClick={closeMoveModal}
+          role="presentation"
+        >
+          <div
+            className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="move-category-modal-title"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 id="move-category-modal-title" className="text-xl font-black text-slate-900">
+                  ย้ายหมวดหมู่ไฟล์
+                </h3>
+                <p className="mt-1 text-sm font-bold text-slate-500">
+                  กำลังย้าย {moveModalIds.length} รายการ
+                </p>
+              </div>
               <button
                 type="button"
-                onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
-                className="flex items-center gap-3"
+                onClick={closeMoveModal}
+                disabled={moveModalBusy}
+                aria-label="ปิดหน้าต่างย้ายหมวดหมู่"
+                className="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
               >
-                <span className="hidden sm:block text-sm font-bold text-slate-800">{userProfile.name}</span>
-                <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden border-2 shadow-sm cursor-pointer transition-colors flex-shrink-0 bg-slate-100 ${isProfileDropdownOpen ? 'border-blue-500' : 'border-slate-200 hover:border-blue-400'}`}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={userProfile.avatar} alt="User Profile" className="w-full h-full object-cover" />
-                </div>
+                ✕
               </button>
+            </div>
 
-              {isProfileDropdownOpen && (
-                <div className="absolute right-0 mt-4 w-80 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
-                  <div className="bg-slate-50 border-b border-slate-100 px-4 py-3 flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-full overflow-hidden border border-slate-200 flex-shrink-0 bg-white">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={userProfile.avatar} alt="User Profile" className="w-full h-full object-cover" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-extrabold text-slate-800 text-sm truncate">{userProfile.name}</p>
-                      <p className="text-xs font-medium text-slate-400 truncate">ข้อมูลที่กรอกไว้ตอนสร้างโปรไฟล์</p>
-                    </div>
-                  </div>
+            {moveModalError && (
+              <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-bold text-red-700">
+                {moveModalError}
+              </p>
+            )}
 
-                  <div className="px-4 py-3 space-y-3">
-                    <div>
-                      <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wide">มหาวิทยาลัย / สถานศึกษา</p>
-                      <p className="text-sm font-bold text-slate-800">{userProfile.institution || 'ยังไม่ได้กรอก'}</p>
-                    </div>
-                    <div>
-                      <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wide">คณะ / สาขาวิชา</p>
-                      <p className="text-sm font-bold text-slate-800">{userProfile.major || 'ยังไม่ได้กรอก'}</p>
-                    </div>
-                    <div>
-                      <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wide">Bio</p>
-                      <p className="text-sm font-medium text-slate-700 whitespace-pre-line">{userProfile.bio || 'ยังไม่ได้กรอก'}</p>
-                    </div>
-                    {userProfile.githubLink && (
-                      <div>
-                        <p className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wide">GitHub</p>
-                        <a href={userProfile.githubLink} target="_blank" rel="noreferrer" className="text-sm font-bold text-blue-600 hover:underline break-all">{userProfile.githubLink}</a>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="border-t border-slate-100 p-3 space-y-2">
-                    {/* แก้ไขลิงก์ตรงนี้ให้วิ่งไปหน้า /profile/edit */}
-                    <Link href="/profile/edit" className="block w-full text-center px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-bold text-sm transition-colors">
-                      แก้ไขโปรไฟล์
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          const { signOutReal } = await import('../../lib/auth');
-                          await signOutReal();
-                        } catch {
-                          // ออกแบบ local ได้แม้เซิร์ฟเวอร์พัง
-                        }
-                        localStorage.removeItem('userRole');
-                        localStorage.removeItem('userEmail');
-                        localStorage.removeItem('userProfile');
-                        window.location.href = '/';
-                      }}
-                      className="block w-full text-center px-4 py-2.5 bg-white border border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-slate-600 rounded-full font-bold text-sm transition-colors"
+            <div className="mt-5 grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="เลือกหมวดหมู่ปลายทาง">
+              {GALLERY_CATEGORIES.map((category) => {
+                const selected = moveModalCategory === category;
+                return (
+                  <button
+                    key={category}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => setMoveModalCategory(category)}
+                    disabled={moveModalBusy}
+                    className={`flex items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-all ${
+                      selected
+                        ? 'border-blue-600 bg-blue-50 ring-2 ring-blue-600/15'
+                        : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/60'
+                    }`}
+                  >
+                    <span
+                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
+                        selected ? 'border-blue-600 bg-blue-600' : 'border-slate-300 bg-white'
+                      }`}
+                      aria-hidden="true"
                     >
-                      ออกจากระบบ
-                    </button>
-                  </div>
-                </div>
-              )}
+                      {selected && <span className="h-2 w-2 rounded-full bg-white" />}
+                    </span>
+                    <span className="text-sm font-extrabold text-slate-700">{category}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={closeMoveModal}
+                disabled={moveModalBusy}
+                className="rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-extrabold text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={() => { void confirmMoveCategories(); }}
+                disabled={!moveModalCategory || moveModalBusy}
+                className="rounded-full bg-blue-600 px-5 py-2.5 text-sm font-extrabold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+              >
+                {moveModalBusy ? 'กำลังย้าย...' : 'ยืนยันการย้ายหมวดหมู่'}
+              </button>
             </div>
           </div>
         </div>
-      </header>
+      )}
 
       {/* ================= เนื้อหาหลัก (Main Content) ================= */}
       <div className="max-w-7xl mx-auto px-4 md:px-8 space-y-12 flex flex-col h-full w-full py-8">
         
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-2xl font-black tracking-tight text-slate-900">วิเคราะห์ทักษะด้วย AI</h2>
+            <p className="mt-1 text-sm font-medium text-slate-500">อัปโหลดผลงานแล้วให้ AI สรุปทักษะ 6 มิติและสายอาชีพที่เหมาะกับคุณ</p>
+          </div>
+          <button
+            type="button"
+            onClick={openHistoryDrawer}
+            className="inline-flex h-11 items-center gap-2 rounded-full border border-slate-200 bg-white px-5 text-sm font-bold text-slate-700 shadow-sm transition-all hover:border-blue-400 hover:text-blue-600 whitespace-nowrap"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            ประวัติการวิเคราะห์
+          </button>
+        </div>
+
         <section className="relative w-full flex-shrink-0">
           <div
             onDragOver={uploadStatus === 'idle' ? handleDragOver : undefined}
@@ -902,7 +1745,7 @@ export default function PortfolioStorage() {
                     เลือกจากคลัง
                   </button>
                 </div>
-                <span className="mt-8 text-sm font-medium text-slate-400">รองรับการเลือกไฟล์ PDF, JPG, PNG (Max 10MB)</span>
+                <span className="mt-8 text-sm font-medium text-slate-400">รองรับการเลือกไฟล์ PDF, JPG, PNG (Max 5MB)</span>
                 {dropError && <p className="mt-3 text-sm font-bold text-red-500 text-center max-w-lg">{dropError}</p>}
               </>
             )}
@@ -975,24 +1818,195 @@ export default function PortfolioStorage() {
           </div>
         </section>
 
+        {duplicateNotices.length > 0 && (
+          <div className="w-full rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
+            <div className="flex items-start justify-between gap-3">
+              <ul className="space-y-1">
+                {duplicateNotices.map((message, index) => (
+                  <li key={`${message}-${index}`}>⚠ {message}</li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                onClick={() => setDuplicateNotices([])}
+                className="shrink-0 rounded-full px-2 py-0.5 text-amber-900/70 hover:bg-amber-100"
+                aria-label="ปิดข้อความแจ้งเตือนไฟล์ซ้ำ"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
+
+        {reuseNotices.length > 0 && (
+          <div className="w-full rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-800">
+            <div className="flex items-start justify-between gap-3">
+              <ul className="space-y-1">
+                {reuseNotices.map((message, index) => (
+                  <li key={`${message}-${index}`}>♻ {message}</li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                onClick={() => setReuseNotices([])}
+                className="shrink-0 rounded-full px-2 py-0.5 text-blue-900/70 hover:bg-blue-100"
+                aria-label="ปิดข้อความแจ้งเตือนการใช้ไฟล์เดิม"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
+
+        {analysisView && activeAnalysis && activeRadarScores && (
+          <section className="w-full space-y-6">
+            <CareerMatchBanner
+              career={activeAnalysis.career}
+              careerEn={activeAnalysis.careerEn}
+              meta={[
+                analysisView.analyzedAt ? `วิเคราะห์เมื่อ ${analysisView.analyzedAt}` : null,
+                `${analysisView.files.length} ไฟล์: ${analysisView.files.map((f) => f.name).join(', ')}`,
+              ].filter(Boolean).join(' · ')}
+              action={
+                <button
+                  type="button"
+                  onClick={() => setShowResultModal(true)}
+                  className="inline-flex h-10 items-center rounded-full bg-slate-900 px-4 text-xs font-bold text-white transition-colors hover:bg-slate-800"
+                >
+                  ดูผลฉบับเต็ม
+                </button>
+              }
+            />
+            <AnalysisRadarGrid scores={activeRadarScores} skillNotes={activeAnalysis.skillNotes} chartSize={380} />
+            <DetectedSkillsCloud skills={activeAnalysis.skills} />
+          </section>
+        )}
+
         {/* --- คลังผลงาน --- */}
         <section className="flex flex-col flex-grow pb-10 w-full">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 border-b border-slate-200 pb-4 flex-shrink-0 gap-4">
-            <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 flex-shrink-0">คลังรูปภาพของฉัน</h2>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 border-b border-slate-200 pb-4 flex-shrink-0">
             <div className="flex items-center gap-3">
-              <button onClick={() => galleryFileInputRef.current?.click()} disabled={gallerySaving} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-bold text-sm transition-all shadow-sm whitespace-nowrap disabled:opacity-60">
-                {gallerySaving ? 'กำลังเพิ่มลงคลัง...' : '+ เพิ่มรูปจากเครื่องสู่คลัง'}
-              </button>
-              <Link href="/gallery" className="px-5 py-2.5 bg-white border border-slate-200 hover:border-blue-400 hover:text-blue-600 text-slate-700 rounded-full font-bold text-sm transition-all shadow-sm whitespace-nowrap">
+              <h2 className="text-3xl font-extrabold tracking-tight text-slate-800 flex-shrink-0">คลังรูปภาพของฉัน</h2>
+              <Link href="/gallery" className="text-sm font-bold text-blue-600 hover:text-blue-700 whitespace-nowrap">
                 ดูรูปทั้งหมด ({myPortfolios.length}) →
               </Link>
             </div>
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
+              <label className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 shadow-xs">
+                <span className="text-xs sm:text-sm font-semibold text-slate-700">หมวดหมู่:</span>
+                <select
+                  value={uploadCategory}
+                  onChange={(e) => setUploadCategory(e.target.value as GalleryCategory)}
+                  className="h-full cursor-pointer appearance-auto bg-transparent text-sm font-semibold text-blue-700 focus:outline-none"
+                >
+                  {PORTFOLIO_CATEGORY_OPTIONS.map((category) => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectionMode((value) => !value);
+                  setGallerySelected([]);
+                  setSelectedIds([]);
+                }}
+                className={`inline-flex h-10 items-center rounded-full px-4 text-sm font-bold transition-all shadow-sm whitespace-nowrap border ${
+                  selectionMode
+                    ? 'bg-slate-900 border-slate-900 text-white hover:bg-slate-800'
+                    : 'bg-white border-slate-200 text-slate-700 hover:border-blue-400 hover:text-blue-600'
+                }`}
+              >
+                {selectionMode ? 'เสร็จสิ้น' : 'เลือกรายการ'}
+              </button>
+              <button onClick={() => galleryFileInputRef.current?.click()} disabled={gallerySaving} className="inline-flex h-10 items-center rounded-full bg-blue-600 px-4 text-sm font-bold text-white transition-all shadow-sm whitespace-nowrap hover:bg-blue-700 disabled:opacity-60">
+                {gallerySaving ? 'กำลังเพิ่มลงคลัง...' : '+ เพิ่มรูปสู่คลัง'}
+              </button>
+            </div>
           </div>
+          {categoryNotice && (
+            <p
+              role="status"
+              aria-live="polite"
+              className={`mb-6 rounded-xl border px-4 py-3 text-xs font-bold ${
+                categoryNotice.type === 'success'
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : 'border-red-200 bg-red-50 text-red-700'
+              }`}
+            >
+              {categoryNotice.message}
+            </p>
+          )}
           {galleryError && (
             <p className="mb-6 text-xs font-bold text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-3">⚠ {galleryError}</p>
           )}
 
-          {gallerySelected.length > 0 && (
+          <div className="mb-6 flex flex-wrap gap-2">
+            {CATEGORY_FILTERS.map((category) => {
+              const count = category === ALL_CATEGORY
+                ? myPortfolios.length
+                : myPortfolios.filter((file) => categoryFor(file) === category).length;
+              const active = activeCategory === category;
+              return (
+                <button
+                  key={category}
+                  type="button"
+                  onClick={() => setActiveCategory(category)}
+                  className={`rounded-full border px-4 py-2 text-xs font-extrabold transition-colors ${
+                    active
+                      ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-blue-300 hover:text-blue-700'
+                  }`}
+                >
+                  {category} <span className={active ? 'text-blue-100' : 'text-slate-400'}>({count})</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {selectedIds.length > 0 && (
+            <div
+              className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 text-white backdrop-blur-md px-5 py-3 rounded-2xl shadow-2xl border border-slate-700 flex items-center gap-3 sm:gap-4"
+            >
+              <span className="text-white font-medium text-sm whitespace-nowrap">เลือกอยู่ {selectedIds.length} รายการ</span>
+              <button
+                type="button"
+                onClick={selectAllVisibleItems}
+                className="px-3 py-1.5 rounded-full text-xs font-bold text-white transition-colors hover:bg-white/10"
+                aria-label="เลือกทั้งหมดในหน้านี้"
+              >
+                เลือกทั้งหมดในหน้านี้
+              </button>
+              <button
+                type="button"
+                onClick={openBatchMoveModalWithSelectedIds}
+                disabled={batchBusy}
+                className="px-4 py-2 rounded-full bg-blue-600 text-white font-bold text-sm transition-colors hover:bg-blue-700 disabled:opacity-50"
+                aria-label="ย้ายหมวดหมู่ที่เลือก"
+              >
+                ย้ายหมวดหมู่ที่เลือก ({selectedIds.length})
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteSelectedIds}
+                disabled={batchBusy}
+                className="px-4 py-2 rounded-full border border-red-200 bg-white text-red-600 font-bold text-sm transition-colors hover:bg-red-50 disabled:opacity-50"
+                aria-label="ลบรูปที่เลือก"
+              >
+                ลบรูปที่เลือก ({selectedIds.length})
+              </button>
+              <button
+                type="button"
+                onClick={clearSelectedIds}
+                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors"
+                aria-label="ล้างการเลือก"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {!selectionMode && gallerySelected.length > 0 && (
             <div className="mb-6 bg-slate-900/90 backdrop-blur-md px-6 py-4 rounded-2xl shadow-2xl flex flex-wrap items-center gap-4">
               <span className="text-white font-medium text-sm whitespace-nowrap">เลือกแล้ว <span className="font-extrabold text-blue-400">{gallerySelected.length}</span> รายการ (คลิกการ์ดเพื่อเลือกเพิ่ม)</span>
               <div className="flex gap-3 ml-auto">
@@ -1003,13 +2017,15 @@ export default function PortfolioStorage() {
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-            {myPortfolios.length > 0 ? (
-              myPortfolios.slice(0, 6).map((file) => {
+            {filteredPortfolios.length > 0 ? (
+              filteredPortfolios.slice(0, 6).map((file) => {
               const card = { id: `db-${file.id}`, title: file.title, imageUrl: file.file_url, type: file.file_type };
-              const selected = gallerySelected.some((f) => f.id === card.id);
+              const analysisSelected = gallerySelected.some((f) => f.id === card.id);
+              const manageSelected = selectedIds.includes(file.id);
+              const highlighted = selectionMode ? manageSelected : analysisSelected;
               return (
-              <div key={file.id} onClick={() => toggleGalleryCard(card)} title="คลิกเพื่อเลือกหลายรูป" className={`group bg-white rounded-3xl shadow-[0_2px_12px_rgba(15,23,42,0.05)] hover:shadow-[0_16px_40px_-16px_rgba(15,23,42,0.18)] border-2 transition-all duration-300 overflow-hidden flex flex-col flex-shrink-0 cursor-pointer relative ${selected ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-slate-100'}`}>
-                {selected && (
+              <div key={file.id} onClick={() => (selectionMode ? toggleSelectedId(file.id) : toggleGalleryCard(card))} title={selectionMode ? 'คลิกเพื่อเลือก/ยกเลิกรายการ' : 'คลิกเพื่อเลือกหลายรูป'} className={`group bg-white rounded-3xl shadow-[0_2px_12px_rgba(15,23,42,0.05)] hover:shadow-[0_16px_40px_-16px_rgba(15,23,42,0.18)] border-2 transition-all duration-300 overflow-hidden flex flex-col flex-shrink-0 cursor-pointer relative ${highlighted ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-slate-100'}`}>
+                {highlighted && (
                   <div className="absolute top-3 right-3 z-20 bg-blue-600 text-white p-1.5 rounded-full shadow-md">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" /></svg>
                   </div>
@@ -1030,14 +2046,63 @@ export default function PortfolioStorage() {
                 </div>
                 <div className="p-6 md:p-8 flex flex-col flex-grow flex-shrink-0">
                   <h3 className="font-extrabold text-slate-800 text-xl truncate flex-shrink-0" title={file.title}>{file.title}</h3>
-                  <p className="text-sm font-medium text-slate-500 mt-2 mb-6 flex-shrink-0">Uploaded on {new Date(file.created_at).toLocaleDateString()}</p>
+                  <p className="text-sm font-medium text-slate-500 mt-2 mb-3 flex-shrink-0">Uploaded on {new Date(file.created_at).toLocaleDateString()}</p>
+
+                  {selectionMode && (
+                    <label
+                      className="mb-3 flex cursor-pointer items-center gap-2 text-xs font-extrabold text-slate-600"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={manageSelected}
+                        onChange={() => toggleSelectedId(file.id)}
+                        className="h-4 w-4 rounded border-slate-300 accent-blue-600"
+                      />
+                      เลือกรายการนี้
+                    </label>
+                  )}
+
+                  <div className="mt-auto flex flex-wrap items-center gap-2" onClick={(event) => event.stopPropagation()}>
+                    <span
+                      className="max-w-full truncate rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-[11px] font-extrabold text-blue-700"
+                      title={`หมวดหมู่ปัจจุบัน: ${categoryFor(file)}`}
+                    >
+                      {categoryFor(file)}
+                    </span>
+                    <div className="ml-auto flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openSingleMoveModal(file)}
+                        aria-label={`ย้ายหมวดหมู่ของ ${file.title}`}
+                        title="ย้ายหมวดหมู่"
+                        className="rounded-full border border-blue-200 bg-white px-3 py-1.5 text-[11px] font-extrabold text-blue-700 transition-colors hover:bg-blue-50"
+                      >
+                        ย้ายหมวด
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { void handleDeletePortfolio(file); }}
+                        disabled={busyId === file.id}
+                        aria-label={`ลบ ${file.title}`}
+                        title="ลบไฟล์นี้"
+                        className="shrink-0 rounded-full border border-red-200 bg-white p-2 text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
               );
               })
             ) : (
               <div className="col-span-full bg-white rounded-3xl border border-dashed border-slate-300 p-10 text-center">
-                <p className="text-sm font-bold text-slate-500">ยังไม่มีไฟล์ในคลัง — กด “+ เพิ่มรูปจากเครื่องสู่คลัง” หรืออัปโหลดด้านบนเพื่อเริ่มต้น</p>
+                <p className="text-sm font-bold text-slate-500">
+                  {myPortfolios.length === 0
+                    ? 'ยังไม่มีไฟล์ในคลัง — กด “+ เพิ่มรูปจากเครื่องสู่คลัง” หรืออัปโหลดด้านบนเพื่อเริ่มต้น'
+                    : `ยังไม่มีไฟล์ในหมวด “${activeCategory}” — เลือกหมวดอื่นหรือย้ายไฟล์เข้าหมวดนี้`}
+                </p>
               </div>
             )}
           </div>

@@ -49,6 +49,15 @@ export async function saveAnalysisReal(userId: string, portfolioId: string, inpu
   skills: string[];
   career?: string | null;
   careerEn?: string | null;
+  careerCategory?: string | null;
+  radarScores?: {
+    technical: number;
+    soft: number;
+    management: number;
+    accuracy: number;
+    communication: number;
+    creativity: number;
+  } | null;
   accuracy?: number;
   technical?: number;
   soft?: number;
@@ -66,6 +75,8 @@ export async function saveAnalysisReal(userId: string, portfolioId: string, inpu
       skills: input.skills,
       career: input.career ?? null,
       career_en: input.careerEn ?? null,
+      career_category: input.careerCategory ?? null,
+      radar_scores: input.radarScores ?? {},
       accuracy: input.accuracy ?? 85,
       technical: input.technical ?? 90,
       soft: input.soft ?? 65,

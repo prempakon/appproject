@@ -53,3 +53,57 @@ html {
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+/* Resume / PDF print layout */
+@page {
+  size: A4;
+  margin: 10mm;
+}
+
+@media print {
+  html,
+  body {
+    background: #ffffff !important;
+  }
+
+  [data-print-hide] {
+    display: none !important;
+  }
+
+  [data-print-area] {
+    width: 100% !important;
+    max-width: none !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .resume-sheet section {
+    break-inside: avoid;
+  }
+}
+
+/* PDF thumbnail preview */
+.pdf-thumbnail {
+  @apply aspect-[1.414] rounded-xl border border-slate-200 bg-slate-50 overflow-hidden relative;
+}
+
+.pdf-thumbnail img {
+  @apply w-full h-full object-cover;
+}
+
+.pdf-thumbnail-overlay {
+  @apply absolute inset-0 flex items-center justify-center bg-black/40 text-white opacity-0 group-hover:opacity-100 transition-opacity;
+}
+
+/* File size limit indicator */
+.file-size-limit {
+  @apply text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-0.5;
+}
+
+/* Public exploration mode badge */
+.exploration-badge {
+  @apply inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[11px] font-extrabold text-blue-700;
+}

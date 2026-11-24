@@ -4,8 +4,9 @@ import { resolveRole } from './database.types';
 // สมัครสมาชิกจริง + สร้างโปรไฟล์คู่กัน (ไม่ลบ flow เดิม ฝั่ง UI ยังเขียน localStorage สำรองไว้)
 export async function signUpReal(email: string, password: string, profile: {
   name: string;
-  institution: string;
-  major: string;
+  institution: string | null;
+  major: string | null;
+  user_status?: string | null;
   avatar_url?: string | null;
 }) {
   const { data, error } = await supabase.auth.signUp({ email, password });
@@ -18,6 +19,7 @@ export async function signUpReal(email: string, password: string, profile: {
       name: profile.name,
       institution: profile.institution,
       major: profile.major,
+      user_status: profile.user_status ?? null,
       avatar_url: profile.avatar_url ?? null,
       role: resolveRole(email),
     }, { onConflict: 'id' });

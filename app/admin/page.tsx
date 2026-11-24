@@ -1,8 +1,11 @@
 'use client';
 
 import React, { useMemo, useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import ResultModal from '../components/ResultModal';
+import { listJobCategories } from '../../lib/jobs';
+import { USER_STATUS_OPTIONS, type UserStatus } from '../../lib/database.types';
 
 type RealFile = {
   id: string;
@@ -20,6 +23,7 @@ type LatestAnalysis = {
   recommendations: { title: string; detail: string }[];
   warnings: string[];
   analyzed_at: string;
+  career_category: string | null;
 };
 
 type StudentHistory = {
@@ -42,8 +46,8 @@ type StudentRow = {
   userId: string;
   name: string;
   email: string;
-  institution: string;
-  major: string;
+  institution: string | null;
+  major: string | null;
   latestUpload: string;
   career: string;
   careerTh: string;
@@ -54,8 +58,6 @@ type StudentRow = {
   latestAnalysis: LatestAnalysis | null;
   history: StudentHistory[];
 };
-
-const CAREER_ORDER = ['Software Engineer', 'Data Scientist', 'UX Designer', 'Cybersecurity Analyst', 'Marketing Strategist', 'Finance Analyst'];
 
 const PAGE_SIZE = 7;
 
@@ -75,24 +77,39 @@ export default function AdminDashboard() {
   const [deleting, setDeleting] = useState<StudentRow | null>(null);
   const [previewFile, setPreviewFile] = useState<RealFile | null>(null);
   const [editing, setEditing] = useState<StudentRow | null>(null);
-  const [editForm, setEditForm] = useState({ name: '', institution: '', major: '', role: 'student' });
+  const [editForm, setEditForm] = useState({ name: '', institution: '', major: '', user_status: USER_STATUS_OPTIONS[0].value, role: 'student' });
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [jobCategories, setJobCategories] = useState<{ id: string; name: string; color: string }[]>([]);
 
   useEffect(() => {
     const role = localStorage.getItem('userRole');
     // ถ้าไม่ใช่ admin ให้เด้งกลับหน้า Login ทันที
     if (role !== 'admin') {
-      router.push('/');
+      router.push('/login');
       return;
     }
-    // ดึงข้อมูลจริงจาก DB (ไม่มี mock — ว่างก็โชว์ว่าง)
+    let cancelled = false;
     (async () => {
       try {
-        const { listProfilesForAdmin } = await import('../../lib/profiles');
-        const { profiles, portfolios, analyses } = await listProfilesForAdmin();
+        const [adminData, categories] = await Promise.all([
+          (async () => {
+            const { listProfilesForAdmin } = await import('../../lib/profiles');
+            return listProfilesForAdmin();
+          })(),
+          (async () => {
+            try {
+              return await listJobCategories();
+            } catch {
+              return [];
+            }
+          })(),
+        ]);
+        if (cancelled) return;
+        setJobCategories(categories.map((c) => ({ id: c.id, name: c.name, color: c.color })));
+        const { profiles, portfolios, analyses } = adminData;
         setAnalyzedIds(analyses.map((a) => a.portfolio_id));
-        // แอดมินไม่ใช่ข้อมูลนักศึกษา กรองออกจากตาราง
+        // แอดมินไม่ใช่ข้อมูลผู้ใช้ทั่วไป กรองออกจากตาราง
         const mapped: StudentRow[] = profiles
           .filter((p) => p.role !== 'admin')
           .map((p) => {
@@ -122,6 +139,7 @@ export default function AdminDashboard() {
                   recommendations: latest.recommendations ?? [],
                   warnings: latest.warnings ?? [],
                   analyzed_at: latest.analyzed_at,
+                  career_category: (latest as { career_category?: string | null }).career_category ?? null,
                 }
               : null,
             realFiles: files.map((f) => ({ id: f.id, title: f.title, file_url: f.file_url, file_type: f.file_type, created_at: f.created_at })),
@@ -141,19 +159,28 @@ export default function AdminDashboard() {
             })),
           };
         });
-        setRows(mapped);
-      } catch {
-        setLoadError('ดึงข้อมูลแอดมินไม่สำเร็จ (อาจยังไม่รัน fix_rls_admin.sql หรือไม่มีสิทธิ์)');
+        if (!cancelled) {
+          setRows(mapped);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setLoadError(err instanceof Error ? err.message : 'ดึงข้อมูลแอดมินไม่สำเร็จ (อาจยังไม่รัน fix_rls_admin.sql หรือไม่มีสิทธิ์)');
+        }
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   const openEdit = (row: StudentRow) => {
     setViewing(null);
     setEditForm({
       name: row.name,
-      institution: row.institution,
-      major: row.major === '-' ? '' : row.major,
+      institution: row.institution ?? '',
+      major: row.major ?? '',
+      user_status: (row as { user_status?: UserStatus | null }).user_status ?? USER_STATUS_OPTIONS[0].value,
       role: row.email === 'admin@lru.ac.th' || row.email === 'superadmin@lru.ac.th' ? 'admin' : 'student',
     });
     setEditError(null);
@@ -172,12 +199,13 @@ export default function AdminDashboard() {
       const { adminUpdateProfile } = await import('../../lib/profiles');
       await adminUpdateProfile(editing.userId, {
         name: editForm.name.trim(),
-        institution: editForm.institution.trim() || 'มหาวิทยาลัยราชภัฏเลย',
-        major: editForm.major.trim() || '-',
+        institution: editForm.institution.trim() || null,
+        major: editForm.major.trim() || null,
+        user_status: editForm.user_status,
         role: editForm.role as 'student' | 'admin',
       });
       setRows((prev) => prev.map((r) => r.id === editing.id
-        ? { ...r, name: editForm.name.trim(), institution: editForm.institution.trim() || 'มหาวิทยาลัยราชภัฏเลย', major: editForm.major.trim() || '-' }
+        ? { ...r, name: editForm.name.trim(), institution: editForm.institution.trim() || null, major: editForm.major.trim() || null }
         : r));
       setEditing(null);
     } catch (err) {
@@ -191,7 +219,8 @@ export default function AdminDashboard() {
     const keyword = search.trim().toLowerCase();
     return rows.filter((row) => {
       const matchKeyword = !keyword || row.name.toLowerCase().includes(keyword) || row.id.toLowerCase().includes(keyword) || row.email.toLowerCase().includes(keyword);
-      const matchCareer = careerFilter === 'all' || row.career === careerFilter;
+      const rowCategory = row.latestAnalysis?.career_category || row.careerTh || '';
+      const matchCareer = careerFilter === 'all' || rowCategory === careerFilter;
       const matchStatus = statusFilter === 'all' || row.status === statusFilter;
       return matchKeyword && matchCareer && matchStatus;
     });
@@ -202,12 +231,27 @@ export default function AdminDashboard() {
   const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const careerStats = useMemo(() => {
-    const counts = CAREER_ORDER.map((career) => ({ career, count: rows.filter((row) => row.career === career).length }));
-    const others = rows.filter((row) => row.career !== '-' && !CAREER_ORDER.includes(row.career)).length;
-    const all = others > 0 ? [...counts, { career: 'อาชีพอื่นๆ', count: others }] : counts;
+    // Group by career_category (dynamic from DB), fallback to careerEn
+    const categoryMap = new Map<string, { name: string; color: string; count: number }>();
+    jobCategories.forEach((c) => categoryMap.set(c.name, { name: c.name, color: c.color, count: 0 }));
+    categoryMap.set('อื่นๆ', { name: 'อื่นๆ', color: '#6b7280', count: 0 });
+
+    rows.forEach((row) => {
+      const cat = row.latestAnalysis?.career_category || row.careerTh || '-';
+      if (cat === '-' || !cat) return;
+      if (categoryMap.has(cat)) {
+        const entry = categoryMap.get(cat)!;
+        entry.count++;
+      } else {
+        const other = categoryMap.get('อื่นๆ')!;
+        other.count++;
+      }
+    });
+
+    const all = [...categoryMap.values()].filter((c) => c.count > 0);
     const max = Math.max(1, ...all.map((c) => c.count));
-    return all.map((c) => ({ ...c, percent: Math.round((c.count / max) * 100) }));
-  }, [rows]);
+    return all.map((c) => ({ career: c.name, count: c.count, color: c.color, percent: Math.round((c.count / max) * 100) }));
+  }, [rows, jobCategories]);
 
   const topSkill = useMemo(() => {
     const tally = new Map<string, number>();
@@ -254,6 +298,12 @@ export default function AdminDashboard() {
             <span className="text-lg font-extrabold text-slate-800">แดชบอร์ดผู้บริหาร</span>
           </div>
           <div className="flex items-center gap-3">
+            <Link
+              href="/admin/jobs"
+              className="rounded-full border border-blue-200 bg-blue-50 px-3.5 py-1.5 text-xs font-extrabold text-blue-700 transition-colors hover:bg-blue-100"
+            >
+              จัดการงานและบริษัท
+            </Link>
             <span className="hidden sm:block text-sm font-bold text-slate-600">ผู้ดูแลระบบ</span>
             <div className="w-9 h-9 rounded-full bg-slate-900 text-white font-black flex items-center justify-center">A</div>
             <button
@@ -268,7 +318,7 @@ export default function AdminDashboard() {
                 localStorage.removeItem('userRole');
                 localStorage.removeItem('userEmail');
                 localStorage.removeItem('userProfile');
-                window.location.href = '/';
+                router.push('/login');
               }}
               className="text-xs font-bold text-slate-400 hover:text-red-600 border border-slate-200 hover:border-red-200 hover:bg-red-50 rounded-full px-3.5 py-1.5 transition-colors"
             >
@@ -288,7 +338,7 @@ export default function AdminDashboard() {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="space-y-4">
-              <StatCard label="จำนวนนักศึกษาทั้งหมด" value={rows.length.toLocaleString()} hint={`${analyzedCount} วิเคราะห์แล้ว / ${rows.length - analyzedCount} ยังไม่วิเคราะห์`} tone="blue" />
+              <StatCard label="จำนวนผู้ใช้ทั้งหมด" value={rows.length.toLocaleString()} hint={`${analyzedCount} วิเคราะห์แล้ว / ${rows.length - analyzedCount} ยังไม่วิเคราะห์`} tone="blue" />
               <StatCard label="พอร์ตโฟลิโอที่วิเคราะห์แล้ว" value={analyzedFiles.toLocaleString()} hint={`จากไฟล์ทั้งหมด ${totalFiles.toLocaleString()} ไฟล์`} tone="green" />
               <StatCard label="ทักษะยอดนิยมสูงสุด" value={topSkill} hint="ทักษะที่พบบ่อยที่สุดจากพอร์ตโฟลิโอ" tone="amber" />
             </div>
@@ -297,18 +347,18 @@ export default function AdminDashboard() {
               <div className="flex items-start justify-between gap-4 mb-8">
                 <div>
                   <h3 className="font-extrabold text-slate-800">การกระจายสายอาชีพที่แนะนำสำหรับการพัฒนาหลักสูตร</h3>
-                  <p className="text-xs font-medium text-slate-400 mt-1">ใช้วางแผนหลักสูตรจากสายอาชีพที่ AI แนะนำให้นักศึกษา</p>
+                  <p className="text-xs font-medium text-slate-400 mt-1">ใช้วางแผนหลักสูตรจากสายอาชีพที่ AI แนะนำให้ผู้ใช้</p>
                 </div>
                 <span className="text-[11px] font-extrabold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full whitespace-nowrap">ภาคเรียนล่าสุด</span>
               </div>
 
               <div className="flex items-end justify-between gap-3 h-52">
-                {careerStats.map((stat, index) => (
+                {careerStats.map((stat) => (
                   <div key={stat.career} className="flex-1 flex flex-col items-center gap-3 h-full justify-end group">
                     <span className="text-xs font-extrabold text-slate-700 opacity-0 group-hover:opacity-100 transition-opacity">{stat.count}</span>
                     <div
                       className="w-full max-w-[52px] rounded-t-md transition-all"
-                      style={{ height: `${Math.max(stat.percent, 6)}%`, backgroundColor: barColor(index) }}
+                      style={{ height: `${Math.max(stat.percent, 6)}%`, backgroundColor: stat.color }}
                     />
                     <span className="text-[10px] font-medium text-slate-500 text-center leading-tight">{stat.career}</span>
                   </div>
@@ -322,7 +372,7 @@ export default function AdminDashboard() {
         <section className="space-y-4">
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
             <div>
-              <h2 className="text-xl font-extrabold tracking-tight text-slate-800">ตรวจสอบพอร์ตโฟลิโอนักศึกษา</h2>
+              <h2 className="text-xl font-extrabold tracking-tight text-slate-800">ตรวจสอบพอร์ตโฟลิโอผู้ใช้</h2>
               <p className="text-xs font-medium text-slate-400 mt-1">พบ {filtered.length} รายการจากทั้งหมด {rows.length} รายการ</p>
             </div>
 
@@ -344,10 +394,11 @@ export default function AdminDashboard() {
                 onChange={(e) => { setCareerFilter(e.target.value); setPage(1); }}
                 className="px-4 py-2.5 rounded-xl bg-white border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none text-sm font-medium transition-all"
               >
-                <option value="all">ทุกสายอาชีพ</option>
-                {CAREER_ORDER.map((career) => (
-                  <option key={career} value={career}>{career}</option>
+                <option value="all">ทุกหมวดอาชีพ</option>
+                {jobCategories.map((cat) => (
+                  <option key={cat.id} value={cat.name}>{cat.name}</option>
                 ))}
+                <option value="อื่นๆ">อื่นๆ</option>
               </select>
 
               <select
@@ -367,7 +418,7 @@ export default function AdminDashboard() {
               <table className="w-full text-left">
                 <thead className="bg-slate-50 border-b border-slate-100">
                   <tr>
-                    <th className="px-6 py-3.5 text-xs font-bold text-slate-500">รหัสนักศึกษา</th>
+                    <th className="px-6 py-3.5 text-xs font-bold text-slate-500">รหัสผู้ใช้</th>
                     <th className="px-6 py-3.5 text-xs font-bold text-slate-500">ชื่อ-นามสกุล</th>
                     <th className="px-6 py-3.5 text-xs font-bold text-slate-500">อัปโหลดล่าสุด</th>
                     <th className="px-6 py-3.5 text-xs font-bold text-slate-500">สายอาชีพที่ AI แนะนำ</th>
@@ -413,7 +464,7 @@ export default function AdminDashboard() {
                   {pageRows.length === 0 && (
                     <tr>
                       <td colSpan={6} className="px-6 py-16 text-center">
-                        <p className="text-sm font-bold text-slate-500">ไม่พบข้อมูลนักศึกษาที่ตรงกับเงื่อนไข</p>
+                        <p className="text-sm font-bold text-slate-500">ไม่พบข้อมูลผู้ใช้ที่ตรงกับเงื่อนไข</p>
                         <button onClick={resetFilters} className="mt-3 text-xs font-extrabold text-blue-600 hover:underline">ล้างตัวกรอง</button>
                       </td>
                     </tr>
@@ -466,8 +517,8 @@ export default function AdminDashboard() {
 
             <div className="px-6 py-5 space-y-5 overflow-y-auto flex-grow custom-scrollbar">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <DetailRow label="สถานศึกษา" value={viewing.institution} />
-                <DetailRow label="คณะ / สาขาวิชา" value={viewing.major} />
+                <DetailRow label="สถานศึกษา" value={viewing.institution ?? '-'} />
+                <DetailRow label="คณะ / สาขาวิชา" value={viewing.major ?? '-'} />
                 <DetailRow label="สายอาชีพที่ AI แนะนำ" value={viewing.careerTh} />
                 <DetailRow label="อัปโหลดล่าสุด" value={`${viewing.latestUpload} · ${viewing.files} ไฟล์`} />
               </div>
@@ -595,7 +646,7 @@ export default function AdminDashboard() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
           <div className="bg-white w-full max-w-md rounded-[2rem] shadow-[0_32px_80px_-24px_rgba(15,23,42,0.3)] overflow-hidden">
             <div className="px-6 py-5 border-b border-slate-100">
-              <h3 className="text-lg font-extrabold tracking-tight text-slate-800">แก้ไขข้อมูลนักศึกษา</h3>
+              <h3 className="text-lg font-extrabold tracking-tight text-slate-800">แก้ไขข้อมูลผู้ใช้</h3>
               <p className="text-xs font-medium text-slate-400 mt-0.5">{editing.id} · {editing.email}</p>
             </div>
 
@@ -608,7 +659,7 @@ export default function AdminDashboard() {
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider">มหาวิทยาลัย / สถานศึกษา</label>
+                <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider">สถานศึกษา / องค์กรปัจจุบัน (ไม่บังคับ)</label>
                 <input
                   type="text" value={editForm.institution} onChange={(e) => setEditForm((p) => ({ ...p, institution: e.target.value }))}
                   className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none text-sm text-slate-800 font-medium"
@@ -616,11 +667,22 @@ export default function AdminDashboard() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider">สาขาวิชา</label>
+                  <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider">สาขาวิชา / สายงานที่เชี่ยวชาญ</label>
                   <input
                     type="text" value={editForm.major} onChange={(e) => setEditForm((p) => ({ ...p, major: e.target.value }))}
                     className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none text-sm text-slate-800 font-medium"
                   />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider">สถานะผู้ใช้</label>
+                  <select
+                    value={editForm.user_status} onChange={(e) => setEditForm((p) => ({ ...p, user_status: e.target.value as UserStatus }))}
+                    className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none text-sm text-slate-800 font-medium"
+                  >
+                    {USER_STATUS_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="space-y-1.5">
                   <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider">สิทธิ์</label>
@@ -628,7 +690,7 @@ export default function AdminDashboard() {
                     value={editForm.role} onChange={(e) => setEditForm((p) => ({ ...p, role: e.target.value }))}
                     className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none text-sm text-slate-800 font-medium"
                   >
-                    <option value="student">นักศึกษา</option>
+                    <option value="student">ผู้ใช้ทั่วไป</option>
                     <option value="admin">แอดมิน</option>
                   </select>
                 </div>
@@ -706,7 +768,7 @@ export default function AdminDashboard() {
             <div className="w-14 h-14 rounded-full bg-red-50 text-red-500 flex items-center justify-center mx-auto mb-4">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-7 h-7"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>
             </div>
-            <h3 className="text-lg font-extrabold text-slate-800">ลบข้อมูลนักศึกษา?</h3>
+            <h3 className="text-lg font-extrabold text-slate-800">ลบข้อมูลผู้ใช้?</h3>
             <p className="text-sm text-slate-500 mt-2">{deleting.name} ({deleting.id}) พร้อมผลวิเคราะห์ทั้งหมดจะถูกลบออกจากรายการนี้</p>
             <div className="flex gap-3 mt-6">
               <button onClick={() => setDeleting(null)} className="flex-1 px-4 py-2.5 rounded-full border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 transition-colors">ยกเลิก</button>
@@ -717,11 +779,6 @@ export default function AdminDashboard() {
       )}
     </main>
   );
-}
-
-function barColor(index: number) {
-  const palette = ['#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#dbeafe'];
-  return palette[index % palette.length];
 }
 
 function StatCard({ label, value, hint, tone }: { label: string; value: string; hint: string; tone: 'blue' | 'green' | 'amber' }) {

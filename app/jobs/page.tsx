@@ -11,8 +11,10 @@ import {
   Briefcase,
 } from 'lucide-react';
 import { rankJobs, matchTone } from '../../lib/jobMatching';
-import { careerLabel, CAREER_OPTIONS, WORK_MODE_LABELS } from '../../lib/careers';
+import { careerLabel, JOB_GROUP_OPTIONS, WORK_MODE_LABELS } from '../../lib/careers';
 import { THAI_PROVINCES } from '../../lib/thaiJobs';
+import { supabase } from '../../lib/supabaseClient';
+import { sanitizeJobQuery } from '../../lib/jobSearch';
 import type { Job, WorkMode } from '../../lib/platform.types';
 
 const REMOTE_LOCATION = 'ทำงานออนไลน์';
@@ -27,6 +29,12 @@ interface JobsApiResponse {
   userCareerEn?: string | null;
   userSkills?: string[];
   authenticated?: boolean;
+  externalCount?: number;
+  requiresSerpApiForThailand?: boolean;
+  missingApiKey?: boolean;
+  serpError?: string | null;
+  serpQuery?: string | null;
+  userRecommendedRole?: string | null;
   error?: string;
 }
 
@@ -46,13 +54,13 @@ const inputClass =
   'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10';
 
 function buildPortals(
-  careerEn: string,
+  roleTitle: string,
   careerText: string,
-  skills: string[],
   location: string,
+  query: string,
 ): PortalCard[] {
-  const keyword =
-    [careerEn || careerText, skills.slice(0, 3).join(' ')].filter(Boolean).join(' ').trim() ||
+  // Clean short English job title only — never long Thai skill sentences.
+  const keyword = [query.trim() || roleTitle || careerText].filter(Boolean).join(' ').trim() ||
     'งานในประเทศไทย';
   const thaiLocation =
     location === REMOTE_LOCATION ? 'ทำงานออนไลน์ (ทั่วประเทศ)' : location || 'ทั่วประเทศไทย';
@@ -130,15 +138,32 @@ export default function JobsPage() {
   const [userCareer, setUserCareer] = useState<string | null>(null);
   const [userCareerEn, setUserCareerEn] = useState<string | null>(null);
   const [userSkills, setUserSkills] = useState<string[]>([]);
+  const [requiresSerpApi, setRequiresSerpApi] = useState(false);
+  const [externalCount, setExternalCount] = useState(0);
+  const [serpError, setSerpError] = useState<string | null>(null);
+  const [clientAuthed, setClientAuthed] = useState(false);
+  const [clientCareer, setClientCareer] = useState<string | null>(null);
+  const [clientCareerEn, setClientCareerEn] = useState<string | null>(null);
+  const [clientRecommendedRole, setClientRecommendedRole] = useState<string | null>(null);
+  const [clientSkills, setClientSkills] = useState<string[]>([]);
 
   const [search, setSearch] = useState('');
   const [career, setCareer] = useState('');
   const [jobLocation, setJobLocation] = useState('');
   const [workMode, setWorkMode] = useState<'all' | WorkMode>('all');
 
+  // Latest analysis row loaded client-side (session lives in localStorage, so
+  // the API's cookie auth can miss it). Feeds % Match + the live job query.
+  // profileRef keeps loadJobs stable — it is read at call time, not subscribed.
+  const profileRef = React.useRef({ role: '', skills: [] as string[] });
+
   const loadJobs = useCallback(async (params?: URLSearchParams) => {
-    const qs = params?.toString();
-    const res = await fetch(`/api/jobs${qs ? `?${qs}` : ''}`, { cache: 'no-store' });
+    const qs = params ? new URLSearchParams(params) : new URLSearchParams();
+    const { role, skills } = profileRef.current;
+    const cleanRole = sanitizeJobQuery(role, 4);
+    if (cleanRole) qs.set('matchRole', cleanRole);
+    if (skills.length > 0) qs.set('matchSkills', skills.slice(0, 8).join(','));
+    const res = await fetch(`/api/jobs?${qs.toString()}`, { cache: 'no-store' });
     const data = (await res.json()) as JobsApiResponse;
     if (!res.ok) throw new Error(data.error ?? 'โหลดข้อมูลงานไม่สำเร็จ');
 
@@ -146,9 +171,67 @@ export default function JobsPage() {
     setAuthenticated(Boolean(data.authenticated));
     setUserCareer(data.userCareer ?? null);
     setUserCareerEn(data.userCareerEn ?? null);
-    setUserSkills(Array.isArray(data.userSkills) ? data.userSkills : []);
+    const serverSkills = Array.isArray(data.userSkills) ? data.userSkills : [];
+    setUserSkills(serverSkills);
+    if (serverSkills.length > 0 && profileRef.current.skills.length === 0) {
+      profileRef.current.skills = serverSkills;
+    }
+    setRequiresSerpApi(Boolean(data.requiresSerpApiForThailand || data.missingApiKey));
+    setExternalCount(typeof data.externalCount === 'number' ? data.externalCount : 0);
+    setSerpError(typeof data.serpError === 'string' && data.serpError ? data.serpError : null);
     setErrorNote('');
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!active || !user) return;
+        setClientAuthed(true);
+        const { data: row } = await supabase
+          .from('analysis_results')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('analyzed_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (!active || !row) return;
+        const r = row as Record<string, unknown>;
+        const career = typeof r.career === 'string' ? r.career : null;
+        const careerEn = typeof r.career_en === 'string' ? r.career_en : null;
+        const recommendedRole =
+          typeof r.recommended_role === 'string' && r.recommended_role.trim()
+            ? r.recommended_role.trim()
+            : null;
+        const skills = Array.isArray(r.skills)
+          ? r.skills.filter((s): s is string => typeof s === 'string')
+          : [];
+        setClientCareer(career);
+        setClientCareerEn(careerEn);
+        setClientRecommendedRole(recommendedRole);
+        setClientSkills(skills);
+        profileRef.current = {
+          role: recommendedRole || careerEn || career || '',
+          skills,
+        };
+        // Refetch once with the real profile so live jobs + % Match engage.
+        setLoading(true);
+        loadJobs()
+          .catch(() => undefined)
+          .finally(() => {
+            if (active) setLoading(false);
+          });
+      } catch {
+        // Profile hints are best-effort; the API still returns DB jobs.
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [loadJobs]);
 
   useEffect(() => {
     let active = true;
@@ -169,26 +252,32 @@ export default function JobsPage() {
     };
   }, [loadJobs]);
 
-  const aiCareer = userCareerEn || userCareer || '';
+  // Server insight wins; fall back to the client-loaded analysis row so % Match
+  // and the AI banner work even when cookie auth misses the localStorage session.
+  const effCareer = userCareer || clientCareer;
+  const effCareerEn = userCareerEn || clientCareerEn;
+  const effSkills = userSkills.length > 0 ? userSkills : clientSkills;
+  const isAuthed = authenticated || clientAuthed;
+  const aiCareer = effCareerEn || effCareer || '';
   const hasCareer = Boolean(aiCareer);
-  const hasSkills = authenticated && userSkills.length > 0;
-  const hasAiProfile = authenticated && (hasCareer || hasSkills);
+  const hasSkills = isAuthed && effSkills.length > 0;
+  const hasAiProfile = isAuthed && (hasCareer || hasSkills);
 
-  const portals = useMemo(
-    () =>
-      buildPortals(
-        career || userCareerEn || '',
-        career ? careerLabel(career) : aiCareer ? careerLabel(aiCareer) : '',
-        userSkills,
-        jobLocation,
-      ),
-    [career, userCareerEn, aiCareer, userSkills, jobLocation],
-  );
+  const portals = useMemo(() => {
+    const roleTitle =
+      sanitizeJobQuery(clientRecommendedRole || effCareerEn || effCareer || '', 4) || effCareerEn || '';
+    return buildPortals(
+      roleTitle,
+      career ? careerLabel(career) : aiCareer ? careerLabel(aiCareer) : '',
+      jobLocation,
+      search,
+    );
+  }, [career, effCareerEn, effCareer, clientRecommendedRole, aiCareer, jobLocation, search]);
 
   const rankedJobs = useMemo(() => {
     const ranked = rankJobs(jobs, {
-      userSkills: hasSkills ? userSkills : [],
-      preferredCareer: career || userCareerEn || null,
+      userSkills: hasSkills ? effSkills : [],
+      preferredCareer: career || effCareerEn || null,
       preferredLocation: jobLocation || null,
     });
 
@@ -199,7 +288,7 @@ export default function JobsPage() {
       const bTime = b.job.created_at ? Date.parse(b.job.created_at) : 0;
       return bTime - aTime;
     });
-  }, [jobs, hasSkills, userSkills, career, userCareerEn, jobLocation]);
+  }, [jobs, hasSkills, effSkills, career, effCareerEn, jobLocation]);
 
   async function handleSearch(event: React.FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -269,7 +358,7 @@ export default function JobsPage() {
           </div>
         </header>
 
-        {!authenticated ? (
+        {!isAuthed ? (
           <section className="mt-6 overflow-hidden rounded-3xl border border-blue-200 bg-gradient-to-r from-blue-50 via-white to-emerald-50 p-5">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-start gap-3">
@@ -331,13 +420,13 @@ export default function JobsPage() {
                   <p className="mt-1 text-sm font-black text-slate-900">
                     {hasCareer ? careerLabel(aiCareer) : 'ยังระบุสายอาชีพไม่ได้'}
                   </p>
-                  {userSkills.length > 0 ? (
+                  {effSkills.length > 0 ? (
                     <p className="mt-1 max-w-2xl text-xs font-medium text-slate-500">
                       ทักษะเด่น:{' '}
                       <span className="font-bold text-slate-700">
-                        {userSkills.slice(0, 6).join(' · ')}
+                        {effSkills.slice(0, 6).join(' · ')}
                       </span>
-                      {userSkills.length > 6 ? ` และอีก ${userSkills.length - 6} ทักษะ` : ''}
+                      {effSkills.length > 6 ? ` และอีก ${effSkills.length - 6} ทักษะ` : ''}
                     </p>
                   ) : (
                     <p className="mt-1 text-xs font-medium text-amber-700">
@@ -381,11 +470,17 @@ export default function JobsPage() {
                 className={inputClass}
               >
                 <option value="">ทุกสายอาชีพ</option>
-                {CAREER_OPTIONS.map((option) => (
+                {JOB_GROUP_OPTIONS.filter((o) => o.value !== '').map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
                 ))}
+                {clientRecommendedRole &&
+                  !JOB_GROUP_OPTIONS.some((o) => o.value === clientRecommendedRole) && (
+                    <option value={clientRecommendedRole}>
+                      ตาม AI: {clientRecommendedRole}
+                    </option>
+                  )}
               </select>
             </label>
 
@@ -461,6 +556,21 @@ export default function JobsPage() {
               {errorNote}
             </p>
           )}
+
+          {requiresSerpApi && (
+            <p className="mt-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-[11px] font-bold text-blue-800">
+              ℹ️ ประกาศงานสดจาก Google Jobs ประเทศไทย (SerpApi) จะพร้อมใช้งานเมื่อตั้งค่า{' '}
+              <code className="rounded bg-blue-100 px-1">SERPAPI_KEY</code> ใน .env —
+              ขณะนี้แสดงเฉพาะประกาศงานจากฐานข้อมูลและลิงก์ค้นหา 4 แพลตฟอร์มด้านล่าง
+            </p>
+          )}
+
+          {serpError && (
+            <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-[11px] font-bold text-amber-800">
+              ⚠️ SerpApi Google Jobs ส่งกลับข้อผิดพลาด: {serpError} —
+              โปรดตรวจสอบ SERPAPI_KEY ใน .env หรือดูการใช้งานบัญชีบน serpapi.com
+            </p>
+          )}
         </section>
 
         <section className="mt-7">
@@ -516,12 +626,12 @@ export default function JobsPage() {
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <h2 className="inline-flex items-center gap-2 text-lg font-black text-slate-900">
               <Briefcase className="h-5 w-5 text-slate-400" />
-              ประกาศงานไทยจากฐานข้อมูล
+              ประกาศงานจริง (ฐานข้อมูล + Live API)
               <span className="text-sm font-extrabold text-slate-400">({rankedJobs.length})</span>
             </h2>
             <p className="text-[11px] font-bold text-slate-400">
               {hasSkills
-                ? `จับคู่จาก ${userSkills.length} ทักษะที่ AI ตรวจพบ`
+                ? `จับคู่จาก ${effSkills.length} ทักษะที่ AI ตรวจพบ`
                 : 'เข้าสู่ระบบและวิเคราะห์โปรไฟล์เพื่อดู % Match'}
             </p>
           </div>
@@ -538,11 +648,14 @@ export default function JobsPage() {
           ) : rankedJobs.length === 0 ? (
             <div className="rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
               <p className="text-sm font-black text-slate-700">
-                ยังไม่มีประกาศงานที่ตรงกับตัวกรองในฐานข้อมูล
+                ยังไม่มีประกาศงานที่ตรงกับตัวกรอง
               </p>
               <p className="mx-auto mt-1 max-w-md text-xs font-medium text-slate-400">
-                ลองล้างตัวกรอง หรือเลือกเว็บไซต์ต้นทางด้านบนเพื่อค้นหาตำแหน่งงานเพิ่มเติม
-                แล้วสมัครกับเว็บไซต์ทางการได้ทันที
+                {serpError
+                  ? `SerpApi ตอบกลับ: ${serpError} — ตรวจสอบ SERPAPI_KEY แล้วลองใหม่`
+                  : requiresSerpApi
+                    ? 'ยังไม่ได้ตั้งค่า SERPAPI_KEY — ตั้งค่าใน .env เพื่อดึงงานจริงจาก Google Jobs ประเทศไทย หรือใช้ลิงก์ค้นหา 4 แพลตฟอร์มด้านบน'
+                    : 'SerpApi ไม่พบงานที่ตรงกับตัวกรองนี้ (0 ผลลัพธ์) — ลองเปลี่ยนสายอาชีพ/ทำเลให้กว้างขึ้น หรือล้างตัวกรอง และใช้ลิงก์ค้นหา 4 แพลตฟอร์มด้านบน'}
               </p>
               <button
                 type="button"
@@ -563,6 +676,11 @@ export default function JobsPage() {
                     className="flex flex-col rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_4px_20px_rgba(15,23,42,0.04)] transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_40px_-24px_rgba(15,23,42,0.35)]"
                   >
                     <div className="flex flex-wrap items-center gap-1.5">
+                      {match.job.source === 'live-api' && (
+                        <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[10px] font-extrabold text-cyan-700">
+                          งานจริง · Live API
+                        </span>
+                      )}
                       {hasSkills && (
                         <span
                           className={`rounded-full border px-2.5 py-1 text-[10px] font-extrabold ${tone.className}`}

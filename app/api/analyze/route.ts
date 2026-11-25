@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
+import { radarScoresFromRow } from '@/lib/analysisRows';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -43,8 +45,9 @@ interface RadarScores {
 interface AIResult {
   skills: string[];
   career: string | null;
-  career_category: string | null;
   careerEn: string | null;
+  recommended_role: string | null;
+  job_keywords: string[];
   radar_scores: RadarScores;
   recommendations: AIRecommendation[];
   warnings: string[];
@@ -56,6 +59,7 @@ interface AIResult {
     communication: string | null;
     creativity: string | null;
   };
+  cachedAnalysis?: boolean;
   _model?: string;
 }
 
@@ -77,8 +81,9 @@ RULE: IRRELEVANT files contribute ZERO skills. Every skill must trace to a CERTI
 Synthesize:
 - skills: 6-12 items, ordered by strength of evidence, names IN THAI (may append the English term in parentheses, e.g. "การเขียนโปรแกรม (Python)", "การวิเคราะห์ข้อมูล (Data Analysis)"). NEVER return only generic ["Python","SQL"] — extract what is actually in the files.
 - career: FREE-FORM Thai text describing the best-fit career or study path based on the evidence AND the student's stated interest (e.g. "วิศวกรซอฟต์แวร์", "นักวิทยาศาสตร์ข้อมูล", "หมอ", "พยาบาล", "ครู"). SHORT: role name only, max 60 characters, NO parentheses, NO explanations — details go in recommendations. Do NOT restrict to any list — respond like a chat AI reading the actual person. If evidence is weak, name the interest but keep scores honest. If your accuracy would be below 30 AND you found fewer than 3 skills, set career to null instead of guessing.
-- career_category: the broad industry category this career belongs to. Examples: "เทคโนโลยีสารสนเทศ", "ธุรกิจและการตลาด", "สร้างสรรค์และออกแบบ", "สาธารณสุขและการแพทย์", "การศึกษา", "การเงินและบัญชี", "วิศวกรรม", "อื่นๆ". Choose the most fitting category or "อื่นๆ" if none apply.
-- careerEn: the NEAREST of [Software Engineer, Data Scientist, UX Designer, Cybersecurity Analyst, Marketing Strategist, Finance Analyst], or null if none fits (e.g. doctor/nurse/teacher). Used for curriculum statistics.
+- careerEn: a SHORT English career/major title in ANY field — Business, Marketing, Accounting/Finance, Design, Engineering, Education, Hospitality, Healthcare, HR, IT, etc. (e.g. "Marketing Executive", "Civil Engineer", "Teacher", "Accountant", "Software Engineer") — or null if none fits. Used for curriculum statistics. Do NOT default to software/IT roles.
+- recommended_role: a SHORT Thai job-board title for the suggested career in ANY industry (e.g. "นักพัฒนาเว็บฟรอนต์เอนด์", "นักวิเคราะห์ข้อมูล", "นักบัญชี", "นักการตลาดดิจิทัล", "นักออกแบบกราฟิก", "วิศวกรโยธา", "ครู", "พยาบาลวิชาชีพ") — role name only, max 60 characters, no parentheses or explanations.
+- job_keywords: 3-5 concise job-search keywords mixing Thai and English titles/skills that match the suggested role AND the actual evidence (e.g. ["นักบัญชี", "Accountant", "บัญชี", "Audit"]) — NEVER generic IT terms unless the evidence supports them.
 - radar_scores: 6-dimension scores 0-100:
   - technical: ทักษะเฉพาะทาง/ฮาร์ดสกิล
   - soft: ทักษะทั่วไป/ซอฟต์สกิล
@@ -96,8 +101,9 @@ Respond with ONLY valid JSON (no markdown, no code fences) in this exact schema:
 {
   "skills": ["ทักษะภาษาไทย", ...],
   "career": "อาชีพที่เหมาะที่สุด ภาษาไทย อิสระ",
-  "career_category": "หมวดอาชีพกว้าง เช่น เทคโนโลยีสารสนเทศ",
-  "careerEn": "one of the 6 English names above or null",
+  "careerEn": "short English career title in any field, or null",
+  "recommended_role": "ชื่อตำแหน่งงานภาษาไทยสั้นๆ ทุกสาขาอาชีพ",
+  "job_keywords": ["คำค้นหางานไทย/อังกฤษ 3-5 คำ ตามหลักฐานจริง"],
   "radar_scores": {
     "technical": 0-100,
     "soft": 0-100,
@@ -137,7 +143,8 @@ export async function POST(req: NextRequest) {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
   const authHeader = req.headers.get('authorization');
   const bearerToken = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() || null;
-  let authenticated = false;
+  let authedUserId: string | null = null;
+  let db: SupabaseClient | null = null;
 
   if (bearerToken) {
     const bearerSupabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -148,7 +155,10 @@ export async function POST(req: NextRequest) {
       },
     });
     const { data, error } = await bearerSupabase.auth.getUser(bearerToken);
-    authenticated = !error && !!data.user;
+    if (!error && data.user) {
+      authedUserId = data.user.id;
+      db = bearerSupabase as unknown as SupabaseClient;
+    }
   } else {
     const cookieStore = await cookies();
     const supabase = createServerClient(
@@ -157,10 +167,13 @@ export async function POST(req: NextRequest) {
       { cookies: { getAll: () => cookieStore.getAll() } },
     );
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    authenticated = !authError && !!user;
+    if (!authError && user) {
+      authedUserId = user.id;
+      db = supabase as unknown as SupabaseClient;
+    }
   }
 
-  if (!authenticated) {
+  if (!authedUserId) {
     return NextResponse.json({ error: 'ต้องเข้าสู่ระบบก่อนใช้งานฟีเจอร์นี้' }, { status: 401 });
   }
 
@@ -180,6 +193,18 @@ export async function POST(req: NextRequest) {
   const major = String(form.get('major') ?? '').slice(0, 200);
   const institution = String(form.get('institution') ?? '').slice(0, 200);
   const files = form.getAll('files').filter((f): f is File => f instanceof File);
+
+  // Duplicate-run guard: same sorted fileIds + !forceReanalyze → return the
+  // previously stored analysis instead of calling Gemini again.
+  const fileIdsParam = String(form.get('fileIds') ?? '');
+  const forceReanalyze = String(form.get('forceReanalyze') ?? '') === 'true';
+  const fileTokens = fileIdsParam.split(',').map((t) => t.trim()).filter(Boolean).slice(0, 20);
+  if (db && fileTokens.length > 0 && !forceReanalyze) {
+    const cached = await findCachedAnalysis(db, authedUserId, fileTokens);
+    if (cached) {
+      return NextResponse.json({ ...cached, cachedAnalysis: true });
+    }
+  }
 
   const ai = new GoogleGenAI({ apiKey });
 
@@ -292,16 +317,20 @@ export async function POST(req: NextRequest) {
     if (!Array.isArray(parsed.skills)) {
       throw new Error('model returned no skills array');
     }
-    const CAREER_EN = ['Software Engineer', 'Data Scientist', 'UX Designer', 'Cybersecurity Analyst', 'Marketing Strategist', 'Finance Analyst'];
-    const careerEn = typeof parsed.careerEn === 'string' && CAREER_EN.includes(parsed.careerEn.trim())
-      ? parsed.careerEn.trim()
-      : null;
+    // careerEn is free-form now (any industry) — accept any short English title.
+    const careerEn =
+      typeof parsed.careerEn === 'string' && /^[a-zA-Z][a-zA-Z\s/&-]{1,58}$/.test(parsed.careerEn.trim())
+        ? parsed.careerEn.trim()
+        : null;
     const radar = parsed.radar_scores as Partial<RadarScores> | undefined;
     const result: AIResult = {
       skills: parsed.skills.map(String).slice(0, 12),
       career: typeof parsed.career === 'string' && parsed.career.trim() ? parsed.career.trim().slice(0, 200) : null,
-      career_category: typeof parsed.career_category === 'string' && parsed.career_category.trim() ? parsed.career_category.trim().slice(0, 100) : null,
       careerEn,
+      recommended_role: typeof parsed.recommended_role === 'string' && parsed.recommended_role.trim() ? parsed.recommended_role.trim().slice(0, 120) : null,
+      job_keywords: Array.isArray(parsed.job_keywords)
+        ? parsed.job_keywords.map(String).map((k) => k.trim()).filter(Boolean).slice(0, 5)
+        : [],
       radar_scores: {
         technical: clampNum(radar?.technical, 0),
         soft: clampNum(radar?.soft, 0),
@@ -333,7 +362,8 @@ export async function POST(req: NextRequest) {
     if (result.radar_scores.accuracy < 30 && result.skills.length < 3) {
       result.career = null;
       result.careerEn = null;
-      result.career_category = null;
+      result.recommended_role = null;
+      result.job_keywords = [];
     }
     return NextResponse.json(result);
   } catch (err) {
@@ -360,4 +390,131 @@ function clampNum(v: unknown, fallback: number) {
         : NaN;
   if (Number.isNaN(n)) return fallback;
   return Math.min(100, Math.max(0, n));
+}
+
+// ---------------------------------------------------------------------------
+// Duplicate-run guard helpers
+// ---------------------------------------------------------------------------
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+type AnalysisRow = Record<string, unknown>;
+
+function numOr(v: unknown, fallback: number) {
+  const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN;
+  return Number.isFinite(n) ? Math.min(100, Math.max(0, Math.round(n))) : fallback;
+}
+
+function mapCachedRow(row: AnalysisRow): AIResult {
+  const radar = (radarScoresFromRow(row) ?? {}) as Record<string, unknown>;
+  const technical = numOr(radar.technical, numOr(row.technical, 0));
+  const soft = numOr(radar.soft, numOr(row.soft, 0));
+  const management = numOr(radar.management, numOr(row.management, 0));
+  return {
+    skills: Array.isArray(row.skills) ? row.skills.map(String).slice(0, 12) : [],
+    career: typeof row.career === 'string' && row.career.trim() ? row.career : null,
+    careerEn: typeof row.career_en === 'string' && row.career_en.trim() ? row.career_en : null,
+    recommended_role: typeof row.recommended_role === 'string' && row.recommended_role.trim() ? row.recommended_role : null,
+    job_keywords: Array.isArray(row.job_keywords)
+      ? row.job_keywords.map(String).slice(0, 5)
+      : [],
+    radar_scores: {
+      technical,
+      soft,
+      management,
+      accuracy: numOr(radar.accuracy, numOr(row.accuracy, 0)),
+      communication: numOr(radar.communication, Math.round((technical + soft) / 2)),
+      creativity: numOr(radar.creativity, Math.round((soft + management) / 2)),
+    },
+    recommendations: Array.isArray(row.recommendations)
+      ? (row.recommendations as AIRecommendation[]).slice(0, 4)
+      : [],
+    warnings: Array.isArray(row.warnings) ? row.warnings.map(String).slice(0, 6) : [],
+    textWarning: null,
+    skillNotes: {
+      technical: noteOf(row.technical_note),
+      soft: noteOf(row.soft_note),
+      management: noteOf(row.management_note),
+      communication: null,
+      creativity: null,
+    },
+  };
+}
+
+/**
+ * Resolve client file tokens (portfolio UUIDs or `hash:<sha256>` for new
+ * uploads) and check whether the user's most recent analysis batch covered
+ * exactly the same set of files. Returns the stored result or null.
+ */
+async function findCachedAnalysis(
+  db: SupabaseClient,
+  userId: string,
+  tokens: string[],
+): Promise<AIResult | null> {
+  try {
+    const tokenKeys: string[] = [];
+    const hashTokens = tokens.filter((t) => t.startsWith('hash:')).map((t) => t.slice(5));
+    const resolvedByHash = new Map<string, string>();
+
+    if (hashTokens.length > 0) {
+      const { data: hashRows, error: hashError } = await db
+        .from('portfolios')
+        .select('id,file_hash')
+        .eq('user_id', userId)
+        .in('file_hash', hashTokens);
+      if (hashError) return null; // file_hash column missing → cannot verify safely
+      for (const row of (hashRows ?? []) as AnalysisRow[]) {
+        if (typeof row.file_hash === 'string' && typeof row.id === 'string') {
+          resolvedByHash.set(row.file_hash, row.id);
+        }
+      }
+    }
+
+    for (const token of tokens) {
+      if (UUID_RE.test(token)) {
+        tokenKeys.push(token);
+      } else if (token.startsWith('hash:')) {
+        const hash = token.slice(5);
+        tokenKeys.push(resolvedByHash.get(hash) ?? token);
+      } else {
+        tokenKeys.push(token);
+      }
+    }
+    const targetSet = new Set(tokenKeys);
+    if (targetSet.size === 0) return null;
+
+    // select('*') — optional columns vary per environment; never name them.
+    const { data, error } = await db
+      .from('analysis_results')
+      .select('*')
+      .eq('user_id', userId)
+      .order('analyzed_at', { ascending: false })
+      .limit(60);
+    const rows = data as AnalysisRow[] | null;
+    if (error || !Array.isArray(rows) || rows.length === 0) return null;
+
+    // Rows from one run are inserted back-to-back; group consecutive rows
+    // whose analyzed_at gap stays under 90s, then compare the file set.
+    const BATCH_GAP_MS = 90_000;
+    const group: AnalysisRow[] = [rows[0] as AnalysisRow];
+    let prevTime = new Date(String(rows[0].analyzed_at)).getTime();
+    for (const row of rows.slice(1) as AnalysisRow[]) {
+      const t = new Date(String(row.analyzed_at)).getTime();
+      if (Number.isFinite(prevTime - t) && prevTime - t <= BATCH_GAP_MS) {
+        group.push(row);
+        prevTime = t;
+      } else {
+        break;
+      }
+    }
+
+    const groupSet = new Set(group.map((r) => String(r.portfolio_id)));
+    if (groupSet.size !== targetSet.size) return null;
+    for (const key of targetSet) {
+      if (!groupSet.has(key)) return null;
+    }
+    return mapCachedRow(rows[0] as AnalysisRow);
+  } catch (err) {
+    console.error('Duplicate-run guard lookup failed:', err instanceof Error ? err.message.slice(0, 200) : err);
+    return null;
+  }
 }

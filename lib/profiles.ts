@@ -1,6 +1,8 @@
 import { supabase } from './supabaseClient';
 import type { Profile, UserStatus } from './database.types';
 import type { ScoreDimensions } from './platform.types';
+import { resolveJobKeywords } from './jobSearch';
+import { radarScoresFromRow, rowNumber } from './analysisRows';
 
 export async function getMyProfile(userId: string): Promise<Profile | null> {
   const { data, error } = await supabase
@@ -50,15 +52,17 @@ export async function listProfilesForAdmin() {
     .select('id,user_id,title,file_url,file_type,created_at')
     .order('created_at', { ascending: false });
   if (pfErr) throw pfErr;
+  // select('*') — optional columns (career_en, radar_scores, recommended_role…)
+  // vary per environment; missing names must never break the query.
   const { data: analyses, error: anErr } = await supabase
     .from('analysis_results')
-    .select('portfolio_id,user_id,skills,career,career_en,accuracy,technical,soft,management,recommendations,warnings,raw_input,analyzed_at')
+    .select('*')
     .order('analyzed_at', { ascending: false });
   if (anErr) throw anErr;
   return {
     profiles: (profiles ?? []) as Profile[],
     portfolios: (portfolios ?? []) as { id: string; user_id: string; title: string; file_url: string; file_type: string; created_at: string }[],
-    analyses: (analyses ?? []) as {
+    analyses: (analyses ?? []) as unknown as {
       portfolio_id: string;
       user_id: string;
       skills: string[];
@@ -72,6 +76,7 @@ export async function listProfilesForAdmin() {
       warnings: string[];
       raw_input: string | null;
       analyzed_at: string;
+      recommended_role?: string | null;
     }[],
   };
 }
@@ -107,7 +112,6 @@ export interface MyAnalysisRow {
   skills: string[];
   career: string | null;
   career_en: string | null;
-  career_category: string | null;
   radar_scores: ScoreDimensions | null;
   accuracy: number;
   technical: number;
@@ -118,37 +122,41 @@ export interface MyAnalysisRow {
   raw_input: string | null;
   warnings: string[];
   skill_notes: { technical: string | null; soft: string | null; management: string | null };
+  recommended_role: string | null;
+  job_keywords: string[];
 }
+
+const MY_ANALYSES_SELECT = '*,portfolios(title)';
 
 export async function listMyAnalyses(userId: string): Promise<MyAnalysisRow[]> {
   const { data, error } = await supabase
     .from('analysis_results')
-    .select('id,portfolio_id,skills,career,career_en,career_category,radar_scores,accuracy,technical,soft,management,recommendations,analyzed_at,raw_input,warnings,technical_note,soft_note,management_note,portfolios(title)')
+    .select(MY_ANALYSES_SELECT)
     .eq('user_id', userId)
     .order('analyzed_at', { ascending: false })
     .limit(20);
   if (error) throw error;
-  const score = (v: unknown, fallback: number) => {
-    const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN;
-    return Number.isFinite(n) ? Math.min(100, Math.max(0, Math.round(n))) : fallback;
-  };
-  const rows = (data ?? []) as unknown as (Omit<MyAnalysisRow, 'portfolio_title' | 'career_category' | 'radar_scores'> & {
-    career_category?: string | null;
+  const rows = (data ?? []) as unknown as (Omit<MyAnalysisRow, 'portfolio_title' | 'radar_scores' | 'recommended_role' | 'job_keywords'> & {
     radar_scores?: Partial<ScoreDimensions> | null;
+    scores?: unknown;
+    result_data?: unknown;
+    analysis_data?: unknown;
+    recommended_role?: string | null;
     portfolios: { title: string } | null;
   })[];
   return rows.map((r) => {
-    const technical = r.technical ?? 0;
-    const soft = r.soft ?? 0;
-    const management = r.management ?? 0;
-    const accuracy = r.accuracy ?? 0;
+    const radarIn = radarScoresFromRow(r as unknown as Record<string, unknown>) ?? {};
+    const technical = rowNumber(radarIn.technical, r.technical ?? 0);
+    const soft = rowNumber(radarIn.soft, r.soft ?? 0);
+    const management = rowNumber(radarIn.management, r.management ?? 0);
+    const accuracy = rowNumber(radarIn.accuracy, r.accuracy ?? 0);
     const radar: ScoreDimensions = {
-      technical: score(r.radar_scores?.technical, technical),
-      soft: score(r.radar_scores?.soft, soft),
-      management: score(r.radar_scores?.management, management),
-      accuracy: score(r.radar_scores?.accuracy, accuracy),
-      communication: score(r.radar_scores?.communication, Math.round((technical + soft) / 2)),
-      creativity: score(r.radar_scores?.creativity, Math.round((soft + management) / 2)),
+      technical,
+      soft,
+      management,
+      accuracy,
+      communication: rowNumber(radarIn.communication, Math.round((technical + soft) / 2)),
+      creativity: rowNumber(radarIn.creativity, Math.round((soft + management) / 2)),
     };
     return {
       id: r.id,
@@ -157,7 +165,6 @@ export async function listMyAnalyses(userId: string): Promise<MyAnalysisRow[]> {
       skills: r.skills ?? [],
       career: r.career ?? null,
       career_en: (r as { career_en?: string | null }).career_en ?? null,
-      career_category: r.career_category ?? null,
       radar_scores: radar,
       accuracy: radar.accuracy,
       technical: radar.technical,
@@ -172,6 +179,14 @@ export async function listMyAnalyses(userId: string): Promise<MyAnalysisRow[]> {
         soft: (r as { soft_note?: string | null }).soft_note ?? null,
         management: (r as { management_note?: string | null }).management_note ?? null,
       },
+      recommended_role: r.recommended_role ?? null,
+      // job_keywords is derived in TS — the column does not exist on
+      // analysis_results, so keywords come from role + career + skills.
+      job_keywords: resolveJobKeywords({
+        role: r.recommended_role ?? null,
+        careerEn: (r as { career_en?: string | null }).career_en ?? null,
+        skills: r.skills ?? [],
+      }),
     };
   });
 }

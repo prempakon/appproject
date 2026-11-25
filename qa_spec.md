@@ -73,7 +73,18 @@
 - [ ] **TC-09: สุขภาพโค้ดและ Build (`npx tsc --noEmit` & `npm run build`)**
   - ผ่าน `npx tsc --noEmit` และ `npm run build` โดยไม่มี Error หรือ Hydration Warning
 
-- [ ] **TC-10: Unified 3-Tier AI Analysis Layout & Radar Label Integrity (`app/main/page.tsx`, `app/components/ResultModal.tsx`, `app/components/RadarChart.tsx`)**
+- [X] **TC-10: Unified 3-Tier AI Analysis Layout & Radar Label Integrity (`app/main/page.tsx`, `app/components/ResultModal.tsx`, `components/AnalysisResultView.tsx`, `app/components/RadarChart.tsx`)**
   - **RadarChart label integrity:** ป้ายชื่อแกนทั้ง 6 ภาษาไทย (`ทักษะเทคนิค`, `ทักษะทั่วไป`, `การบริหารจัดการ`, `ความแม่นยำของข้อมูล`, `การสื่อสาร`, `ความคิดสร้างสรรค์`) ต้อง render ครบทุกตัวอักษรโดยไม่ถูกขอบ SVG ตัดที่ด้านบน ซ้าย หรือขวา ในทุกจุดที่ใช้กราฟ (`/main`, `ResultModal`, `/analytics`, landing preview)
   - **Popup Modal parity:** Modal `"ผลการวิเคราะห์ทักษะด้วยระบบ AI"` (เปิดจากปุ่ม `ดูฉบับเต็ม` ในลิ้นชักประวัติหรือส่วนผลวิเคราะห์) ต้องแสดง 3-Tier Unified Layout เหมือนหน้า `/main` ทุกประการ — Tier 1 Career Match Banner (`สรุปสายงานที่สอดคล้อง` + ปุ่ม `ดาวน์โหลด PDF`), Tier 2 RadarChart + การ์ดทักษะ 6 ใบ, Tier 3 `ทักษะที่ตรวจพบจากเอกสาร` — และต้องไม่มี Legacy 3-Bar horizontal progress layout หลงเหลือ
   - **Skill tag cloud placement:** ป้าย Tag ทักษะสีน้ำเงินต้องอยู่ใต้ RadarChart + กริดการ์ด 6 ใบอย่างเป็นระเบียบ พร้อม badge จำนวน `X ทักษะ` และข้อความ empty state เมื่อไม่พบทักษะ
+
+- [ ] **TC-11: Google Jobs Engine & Duplicate-Run Guard (`app/api/jobs/route.ts`, `app/api/analyze/route.ts`, `lib/jobSearch.ts`, `supabase/migrations/20261125_job_search_cache.sql`)**
+  - `GET /api/jobs?role=...&keywords=...&level=...` ต้องตอบ HTTP 200 เสมอ — ไม่มี rate-limit หรือ missing `RAPIDAPI_KEY` แล้วขึ้น 500; ทุก response ต้องมี `fallbackLinks` ครบ 5 แพลตฟอร์ม (Google Jobs, LinkedIn, JobsDB TH, JobThai, Blognone)
+  - Cache hit ภายใน 24 ชั่วโมงต้องไม่เรียก JSearch ซ้ำ; `forceRefresh` ต้อง bypass cache และ upsert ผลลัพธ์ใหม่ลง `job_search_cache`
+  - `POST /api/analyze` ต้องคืน `recommended_role` (ไทย) + `job_keywords` (3–5 คำ) และรองรับ record เก่าผ่าน Thai→English fallback dictionary; ส่งไฟล์ชุดเดิมซ้ำโดยไม่ `forceReanalyze` ต้องคืน record เดิม (`cachedAnalysis: true`) โดยไม่เรียก Gemini และไม่ insert แถวซ้ำ
+  - หน้า `/main`: ผู้ใช้ที่ยังไม่มีผลวิเคราะห์ต้องเห็น Empty State + Quick Explore chips (ต้องไม่ auto-call `/api/jobs`); ผู้ใช้ที่มีผลวิเคราะห์ต้องเห็น `AnalysisResultView` ทันที + `JobRecommendationsSection` โหลด async (filter pills, keyword chips, cache badge, refresh, skeleton loaders, job cards, แถบค้นหา 5 แพลตฟอร์ม)
+
+- [ ] **TC-12: RadarChart Label Integrity v2 & Analytics Dedup (`app/components/RadarChart.tsx`, `components/AnalysisResultView.tsx`, `app/components/ResultModal.tsx`, `app/analytics/page.tsx`)**
+  - RadarChart ขยายเป็น `viewBox 0 0 460 340` — ป้าย 6 แกนภาษาไทยที่ radius 132 ต้องไม่ถูกขอบ SVG ตัด (textAnchor `middle`/`start`/`end` ถูกต้อง) ทุกจุดที่ใช้กราฟ
+  - Popup Modal ต้องไม่มีปุ่ม `ดาวน์โหลด PDF` ซ้ำใน banner `สรุปสายงานที่สอดคล้อง` — เหลือเฉพาะปุ่มสีน้ำเงินใน footer modal
+  - `/analytics`: toggle `คะแนนล่าสุด (Latest)` / `คะแนนสูงสุดรายด้าน (Peak per Axis)` ต้อง sync ทั้ง radar และ stat cards; ทักษะที่ตรวจพบซ้ำในหลายเอกสารต้องนับเป็น 1 unique skill พร้อม badge `พบใน N เอกสาร`

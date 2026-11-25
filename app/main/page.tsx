@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Trash2 } from 'lucide-react';
 import ResultModal from '../components/ResultModal'; 
-import { AnalysisRadarGrid, CareerMatchBanner, DetectedSkillsCloud } from '../components/AnalysisResultTiers';
+import { AnalysisResultView } from '../../components/AnalysisResultView';
+import { JobRecommendationsSection } from '../../components/JobRecommendationsSection';
 import { supabase } from '../../lib/supabaseClient';
 import type { ScoreDimensions } from '../../lib/platform.types';
 import {
@@ -52,7 +53,7 @@ type SkillAnalysis = {
   skills: string[];
   career: string | null;
   careerEn: string | null;
-  careerCategory: string | null;
+  recommendedRole: string | null;
   radarScores: ScoreDimensions;
   accuracy: number;
   technical: number;
@@ -329,6 +330,7 @@ export default function PortfolioStorage() {
   const [analysisView, setAnalysisView] = useState<AnalysisView | null>(null);
   const [myPortfolios, setMyPortfolios] = useState<PortfolioRow[]>([]);
   const [myHistory, setMyHistory] = useState<AnalysisHistoryItem[]>([]);
+  const [historyReady, setHistoryReady] = useState(false);
   const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
@@ -442,7 +444,7 @@ export default function PortfolioStorage() {
             skills: a.skills,
             career: a.career,
             careerEn: a.career_en,
-            careerCategory: a.career_category,
+            recommendedRole: a.recommended_role ?? null,
             radarScores: a.radar_scores ?? {
               technical: a.technical,
               soft: a.soft,
@@ -469,6 +471,7 @@ export default function PortfolioStorage() {
       setHistoryError(errText(err, 'โหลดประวัติการวิเคราะห์ไม่สำเร็จ'));
     } finally {
       setHistoryLoading(false);
+      setHistoryReady(true);
     }
   };
 
@@ -588,6 +591,7 @@ export default function PortfolioStorage() {
         schemaCaps.current.category = !categoryProbe.error;
 
         await refreshMyPortfolios();
+        void loadAnalysisHistory();
       } catch {
         if (!cancelled) router.replace('/login?redirect=/main');
       }
@@ -629,7 +633,7 @@ export default function PortfolioStorage() {
     setUploadStatus('preview');
   };
 
-  const startAIProcessing = async () => {
+  const startAIProcessing = async (forceReanalyze = false) => {
     const { data: { session } } = await supabase.auth.getSession();
     const { data: { user: liveUser } } = await supabase.auth.getUser();
     if (!session?.access_token || !liveUser) {
@@ -646,6 +650,9 @@ export default function PortfolioStorage() {
     setReuseNotices([]);
     // 1) เรียก Gemini วิเคราะห์ (ไฟล์จริง + ข้อความอาชีพที่สนใจ)
     let ai: SkillAnalysis | null = null;
+    let allCachedAnalysis = false;
+    let sawCachedResponse = false;
+    let sawFreshResponse = false;
     // ย่อรูปก่อนส่งให้ AI (ประหยัดโควต้า token + เร็วขึ้น ไฟล์ต้นฉบับยังอัปโหลดเต็มขนาด)
     // เอกสารตัวหนังสือใช้ 1600px เพื่อให้ AI อ่านข้อความในใบเซอร์ได้ชัด
     // หมายเหตุ: Vercel รับ body ได้ไม่เกิน ~4.5MB เลยย่อเหลือ 1024px คุณภาพ 0.8
@@ -689,6 +696,18 @@ export default function PortfolioStorage() {
       const chunks: File[][] = [];
       for (let i = 0; i < analyzable.length; i += 5) chunks.push(analyzable.slice(i, i + 5));
       const batchResults: SkillAnalysis[] = [];
+      const hashByFile = new Map<File, string>();
+      const tokenForFile = async (f: File): Promise<string> => {
+        const idx = selectedFiles.indexOf(f);
+        const existing = idx >= 0 ? selectedExistingIds[idx] ?? null : null;
+        if (existing) return existing;
+        let h = hashByFile.get(f);
+        if (!h) {
+          h = await computeFileSha256(f);
+          hashByFile.set(f, h);
+        }
+        return `hash:${h}`;
+      };
       for (const [ci, chunk] of chunks.entries()) {
         if (chunks.length > 1) setBatchProgress(`กำลังวิเคราะห์รอบที่ ${ci + 1}/${chunks.length}...`);
         const form = new FormData();
@@ -699,6 +718,9 @@ export default function PortfolioStorage() {
         for (const f of chunk) {
           form.append('files', await downscaleImage(f), f.name);
         }
+        const chunkIds = (await Promise.all(chunk.map((f) => tokenForFile(f)))).sort();
+        form.append('fileIds', chunkIds.join(','));
+        if (forceReanalyze) form.append('forceReanalyze', 'true');
         const res = await fetch('/api/analyze', {
           method: 'POST',
           body: form,
@@ -715,6 +737,8 @@ export default function PortfolioStorage() {
           throw new Error(errBody.error || `AI วิเคราะห์ไม่สำเร็จ (HTTP ${res.status})`);
         }
         const data = await res.json();
+        if (data.cachedAnalysis) sawCachedResponse = true;
+        else sawFreshResponse = true;
         if (!Array.isArray(data.skills)) {
           throw new Error('AI ตอบกลับไม่ถูกต้อง ลองใหม่อีกครั้ง');
         }
@@ -729,7 +753,7 @@ export default function PortfolioStorage() {
           skills: data.skills,
           career: data.career ?? null,
           careerEn: typeof data.careerEn === 'string' ? data.careerEn : null,
-          careerCategory: typeof data.career_category === 'string' && data.career_category.trim() ? data.career_category.trim() : null,
+          recommendedRole: typeof data.recommended_role === 'string' && data.recommended_role.trim() ? data.recommended_role.trim() : null,
           radarScores: { technical, soft, management, accuracy, communication, creativity },
           accuracy,
           technical,
@@ -761,7 +785,7 @@ export default function PortfolioStorage() {
         }).slice(0, 12),
         career: batchResults.map((r) => r.career).find((c) => !!c) ?? null,
         careerEn: batchResults.map((r) => r.careerEn).find((c) => !!c) ?? null,
-        careerCategory: batchResults.map((r) => r.careerCategory).find((c) => !!c) ?? null,
+        recommendedRole: batchResults.map((r) => r.recommendedRole).find((r) => !!r) ?? null,
         radarScores: {
           technical: avg(batchResults.map((r) => r.radarScores.technical)),
           soft: avg(batchResults.map((r) => r.radarScores.soft)),
@@ -787,6 +811,7 @@ export default function PortfolioStorage() {
         },
         model: batchResults.map((r) => r.model).find((m) => !!m) ?? null,
       };
+      allCachedAnalysis = sawCachedResponse && !sawFreshResponse;
     } catch (err) {
       // AI ล้มเหลว: กลับไปหน้า preview พร้อมข้อความ error — ไม่โชว์ mock ไม่เซฟค่าปลอม
       setUploadStatus('preview');
@@ -796,7 +821,7 @@ export default function PortfolioStorage() {
     // 2) บันทึกผลจริงลง DB (ai เป็น null ไม่ได้แล้วเพราะ return ไปก่อนถ้า AI ล้มเหลว)
     try {
       const { saveAnalysisReal } = await import('../../lib/storage');
-      if (selectedFiles.length > 0 && ai) {
+      if (selectedFiles.length > 0 && ai && !allCachedAnalysis) {
         let rows: PortfolioRow[] = [];
         try {
           rows = await fetchPortfolioRows(liveUser.id);
@@ -808,7 +833,7 @@ export default function PortfolioStorage() {
           skills: ai.skills,
           career: ai.career,
           careerEn: ai.careerEn,
-          careerCategory: ai.careerCategory,
+          recommendedRole: ai.recommendedRole,
           radarScores: ai.radarScores,
           accuracy: ai.accuracy,
           technical: ai.technical,
@@ -1379,8 +1404,12 @@ export default function PortfolioStorage() {
     );
   }
 
-  const activeAnalysis = analysisView?.analysis ?? null;
-  const activeRadarScores = activeAnalysis?.radarScores ?? null;
+  // Analyzed users see their latest result immediately (fresh run wins,
+  // otherwise the newest history record) without blocking the page.
+  const displayView: AnalysisView | null =
+    analysisView ?? (myHistory.length > 0 ? analysisViewForHistory(myHistory[0]) : null);
+  const displayAnalysis = displayView?.analysis ?? null;
+  const displayRadarScores = displayAnalysis?.radarScores ?? null;
 
   return (
     <main className="min-h-screen bg-[#f8f9fa] text-slate-800 font-sans relative overflow-x-hidden flex flex-col">
@@ -1780,7 +1809,7 @@ export default function PortfolioStorage() {
 
                 <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md justify-center">
                   <button onClick={resetUpload} className="flex-1 px-6 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full font-bold text-base transition-all active:scale-95">ยกเลิก</button>
-                  <button onClick={startAIProcessing} className="flex-1 px-6 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-bold text-base transition-all shadow-lg shadow-blue-600/30 active:scale-95 flex items-center justify-center gap-2">
+                  <button onClick={() => void startAIProcessing()} className="flex-1 px-6 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-bold text-base transition-all shadow-lg shadow-blue-600/30 active:scale-95 flex items-center justify-center gap-2">
                     ให้ AI วิเคราะห์ทักษะ
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
                   </button>
@@ -1858,16 +1887,20 @@ export default function PortfolioStorage() {
           </div>
         )}
 
-        {analysisView && activeAnalysis && activeRadarScores && (
-          <section className="w-full space-y-6">
-            <CareerMatchBanner
-              career={activeAnalysis.career}
-              careerEn={activeAnalysis.careerEn}
-              meta={[
-                analysisView.analyzedAt ? `วิเคราะห์เมื่อ ${analysisView.analyzedAt}` : null,
-                `${analysisView.files.length} ไฟล์: ${analysisView.files.map((f) => f.name).join(', ')}`,
-              ].filter(Boolean).join(' · ')}
-              action={
+        {displayView && displayAnalysis && displayRadarScores && (
+          <AnalysisResultView
+            career={displayAnalysis.career}
+            careerEn={displayAnalysis.careerEn}
+            scores={displayRadarScores}
+            skills={displayAnalysis.skills}
+            skillNotes={displayAnalysis.skillNotes}
+            meta={[
+              displayView.analyzedAt ? `วิเคราะห์เมื่อ ${displayView.analyzedAt}` : null,
+              `${displayView.files.length} ไฟล์: ${displayView.files.map((f) => f.name).join(', ')}`,
+            ].filter(Boolean).join(' · ')}
+            chartSize={380}
+            action={
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setShowResultModal(true)}
@@ -1875,11 +1908,27 @@ export default function PortfolioStorage() {
                 >
                   ดูผลฉบับเต็ม
                 </button>
-              }
-            />
-            <AnalysisRadarGrid scores={activeRadarScores} skillNotes={activeAnalysis.skillNotes} chartSize={380} />
-            <DetectedSkillsCloud skills={activeAnalysis.skills} />
-          </section>
+                {analysisView && selectedFiles.length > 0 && uploadStatus !== 'processing' && (
+                  <button
+                    type="button"
+                    onClick={() => void startAIProcessing(true)}
+                    className="inline-flex h-10 items-center rounded-full border border-blue-600 bg-white px-4 text-xs font-bold text-blue-700 transition-colors hover:bg-blue-50"
+                  >
+                    วิเคราะห์ใหม่ (บังคับ)
+                  </button>
+                )}
+              </div>
+            }
+          />
+        )}
+
+        {historyReady && (
+          <JobRecommendationsSection
+            role={displayAnalysis?.recommendedRole ?? displayAnalysis?.career ?? null}
+            careerEn={displayAnalysis?.careerEn ?? null}
+            skills={displayAnalysis?.skills ?? []}
+            hasAnalysis={Boolean(displayAnalysis)}
+          />
         )}
 
         {/* --- คลังผลงาน --- */}

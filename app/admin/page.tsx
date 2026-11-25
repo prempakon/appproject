@@ -23,7 +23,7 @@ type LatestAnalysis = {
   recommendations: { title: string; detail: string }[];
   warnings: string[];
   analyzed_at: string;
-  career_category: string | null;
+  recommended_role: string | null;
 };
 
 type StudentHistory = {
@@ -139,7 +139,7 @@ export default function AdminDashboard() {
                   recommendations: latest.recommendations ?? [],
                   warnings: latest.warnings ?? [],
                   analyzed_at: latest.analyzed_at,
-                  career_category: (latest as { career_category?: string | null }).career_category ?? null,
+                  recommended_role: (latest as { recommended_role?: string | null }).recommended_role ?? null,
                 }
               : null,
             realFiles: files.map((f) => ({ id: f.id, title: f.title, file_url: f.file_url, file_type: f.file_type, created_at: f.created_at })),
@@ -219,7 +219,7 @@ export default function AdminDashboard() {
     const keyword = search.trim().toLowerCase();
     return rows.filter((row) => {
       const matchKeyword = !keyword || row.name.toLowerCase().includes(keyword) || row.id.toLowerCase().includes(keyword) || row.email.toLowerCase().includes(keyword);
-      const rowCategory = row.latestAnalysis?.career_category || row.careerTh || '';
+      const rowCategory = row.latestAnalysis?.recommended_role || row.careerTh || '';
       const matchCareer = careerFilter === 'all' || rowCategory === careerFilter;
       const matchStatus = statusFilter === 'all' || row.status === statusFilter;
       return matchKeyword && matchCareer && matchStatus;
@@ -231,13 +231,13 @@ export default function AdminDashboard() {
   const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const careerStats = useMemo(() => {
-    // Group by career_category (dynamic from DB), fallback to careerEn
+    // Group by recommended_role (dynamic from DB), fallback to career (TH)
     const categoryMap = new Map<string, { name: string; color: string; count: number }>();
     jobCategories.forEach((c) => categoryMap.set(c.name, { name: c.name, color: c.color, count: 0 }));
     categoryMap.set('อื่นๆ', { name: 'อื่นๆ', color: '#6b7280', count: 0 });
 
     rows.forEach((row) => {
-      const cat = row.latestAnalysis?.career_category || row.careerTh || '-';
+      const cat = row.latestAnalysis?.recommended_role || row.careerTh || '-';
       if (cat === '-' || !cat) return;
       if (categoryMap.has(cat)) {
         const entry = categoryMap.get(cat)!;

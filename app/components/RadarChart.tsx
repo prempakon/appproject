@@ -9,31 +9,38 @@ interface RadarChartProps {
   showValues?: boolean;
 }
 
+const VIEW_W = 460;
+const VIEW_H = 340;
+const CX = 230;
+const CY = 170;
+const MAX_RADIUS = 115;
+const LABEL_RADIUS = 132;
+const LABEL_FONT = 13;
+
 export default function RadarChart({
   labels,
   values,
-  size = 400,
   color = '#2563eb',
   fillColor = 'rgba(37, 99, 235, 0.18)',
   showValues = true,
 }: RadarChartProps) {
   const count = Math.max(3, Math.min(labels.length, values.length));
-  // viewBox ไม่จำเป็นต้องเป็นสี่เหลี่ยมจัตุรัส: เผื่อพื้นที่แนวนอนมากกว่า
-  // เพื่อให้ป้ายชื่อแกนภาษาไทย (ยาวสุด ~15 ตัวอักษร) ไม่ถูกขอบซ้าย/ขวาตัด
-  const padX = Math.ceil(size * 0.34);
-  const padY = Math.ceil(size * 0.14);
-  const viewW = size + padX * 2;
-  const viewH = size + padY * 2;
-  const centerX = viewW / 2;
-  const centerY = viewH / 2;
-  const radius = (size - 20) * 0.35;
   const angleStep = (Math.PI * 2) / count;
 
   const pointAt = (index: number, ratio: number) => {
     const angle = -Math.PI / 2 + index * angleStep;
     return {
-      x: centerX + Math.cos(angle) * radius * ratio,
-      y: centerY + Math.sin(angle) * radius * ratio,
+      x: CX + Math.cos(angle) * MAX_RADIUS * ratio,
+      y: CY + Math.sin(angle) * MAX_RADIUS * ratio,
+    };
+  };
+
+  const labelPointAt = (index: number) => {
+    const angle = -Math.PI / 2 + index * angleStep;
+    return {
+      x: CX + Math.cos(angle) * LABEL_RADIUS,
+      y: CY + Math.sin(angle) * LABEL_RADIUS,
+      cos: Math.cos(angle),
     };
   };
 
@@ -46,10 +53,10 @@ export default function RadarChart({
 
   return (
     <svg
-      viewBox={`0 0 ${viewW} ${viewH}`}
+      viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
       role="img"
       aria-label="กราฟเรดาร์แสดงระดับทักษะ 6 มิติ"
-      className="h-auto w-full max-w-full"
+      className="h-auto w-full overflow-visible"
     >
       {gridLevels.map((level) => {
         const points = Array.from({ length: count })
@@ -71,44 +78,30 @@ export default function RadarChart({
 
       {Array.from({ length: count }).map((_, index) => {
         const outer = pointAt(index, 1);
-        const labelPoint = pointAt(index, 1.5);
-        const anchor = Math.abs(labelPoint.x - centerX) < 8 ? 'middle' : labelPoint.x > centerX ? 'start' : 'end';
+        const lp = labelPointAt(index);
         const labelText = labels[index] ?? '';
-        // ประเมินความกว้างโดยประมาณ (~11pxต่อตัวอักษรไทยที่ fontSize 10)
-        // แล้วจำกัด textLength ไม่ให้เกินพื้นที่ว่างจริงของแต่ละด้าน
-        const estWidth = labelText.length * 11;
-        const margin = 6;
-        const availWidth =
-          anchor === 'middle'
-            ? 2 * Math.min(labelPoint.x - margin, viewW - margin - labelPoint.x)
-            : anchor === 'end'
-              ? labelPoint.x - margin
-              : viewW - margin - labelPoint.x;
-        const cap = Math.min(128, Math.max(24, Math.floor(availWidth)));
-        const fitLength = estWidth > cap ? cap : undefined;
+        const anchor = lp.cos > 0.1 ? 'start' : lp.cos < -0.1 ? 'end' : 'middle';
         return (
           <g key={labelText || index}>
-            <line x1={centerX} y1={centerY} x2={outer.x} y2={outer.y} stroke="#e2e8f0" strokeWidth={1} />
+            <line x1={CX} y1={CY} x2={outer.x} y2={outer.y} stroke="#e2e8f0" strokeWidth={1} />
             <text
-              x={labelPoint.x}
-              y={labelPoint.y}
+              x={lp.x}
+              y={lp.y}
               textAnchor={anchor}
               dominantBaseline="middle"
-              fontSize={10}
-              fontWeight={800}
-              fill="#475569"
-              textLength={fitLength}
-              lengthAdjust={fitLength ? 'spacingAndGlyphs' : undefined}
+              fontSize={LABEL_FONT}
+              fontWeight={600}
+              fill="#334155"
             >
               {labelText}
             </text>
             {showValues && (
               <text
                 x={dataPoints[index].x}
-                y={dataPoints[index].y - 8}
+                y={dataPoints[index].y - 10}
                 textAnchor="middle"
-                fontSize={9}
-                fontWeight={800}
+                fontSize={11}
+                fontWeight={700}
                 fill={color}
               >
                 {Math.round(values[index] ?? 0)}
@@ -120,7 +113,7 @@ export default function RadarChart({
 
       <polygon points={polygon} fill={fillColor} stroke={color} strokeWidth={2.5} strokeLinejoin="round" />
       {dataPoints.map((point, index) => (
-        <circle key={index} cx={point.x} cy={point.y} r={4} fill="#ffffff" stroke={color} strokeWidth={2.5} />
+        <circle key={index} cx={point.x} cy={point.y} r={4.5} fill="#ffffff" stroke={color} strokeWidth={2.5} />
       ))}
     </svg>
   );

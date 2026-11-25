@@ -49,7 +49,6 @@ export async function saveAnalysisReal(userId: string, portfolioId: string, inpu
   skills: string[];
   career?: string | null;
   careerEn?: string | null;
-  careerCategory?: string | null;
   radarScores?: {
     technical: number;
     soft: number;
@@ -66,30 +65,54 @@ export async function saveAnalysisReal(userId: string, portfolioId: string, inpu
   rawInput?: string | null;
   warnings?: string[];
   skillNotes?: { technical: string | null; soft: string | null; management: string | null };
+  recommendedRole?: string | null;
 }) {
-  const { data, error } = await supabase
-    .from('analysis_results')
-    .insert({
-      user_id: userId,
-      portfolio_id: portfolioId,
-      skills: input.skills,
-      career: input.career ?? null,
-      career_en: input.careerEn ?? null,
-      career_category: input.careerCategory ?? null,
-      radar_scores: input.radarScores ?? {},
-      accuracy: input.accuracy ?? 85,
-      technical: input.technical ?? 90,
-      soft: input.soft ?? 65,
-      management: input.management ?? 50,
-      recommendations: input.recommendations ?? [],
-      raw_input: input.rawInput ?? null,
-      warnings: input.warnings ?? [],
-      technical_note: input.skillNotes?.technical ?? null,
-      soft_note: input.skillNotes?.soft ?? null,
-      management_note: input.skillNotes?.management ?? null,
-    })
-    .select()
-    .single();
+  // Optional columns (career_en, radar_scores, raw_input, warnings, *_note,
+  // recommended_role) exist only where the matching migration ran — never
+  // name a column that might be missing; degrade to richer→poorer payloads.
+  const corePayload = {
+    user_id: userId,
+    portfolio_id: portfolioId,
+    skills: input.skills,
+    career: input.career ?? null,
+    accuracy: input.accuracy ?? 85,
+    technical: input.technical ?? 90,
+    soft: input.soft ?? 65,
+    management: input.management ?? 50,
+    recommendations: input.recommendations ?? [],
+  };
+  const enrichedPayload = {
+    ...corePayload,
+    career_en: input.careerEn ?? null,
+    radar_scores: input.radarScores ?? {},
+    raw_input: input.rawInput ?? null,
+    warnings: input.warnings ?? [],
+    technical_note: input.skillNotes?.technical ?? null,
+    soft_note: input.skillNotes?.soft ?? null,
+    management_note: input.skillNotes?.management ?? null,
+  };
+  const { radar_scores: _omitRadar, ...enrichedNoRadar } = enrichedPayload;
+  const attempts = [
+    { ...enrichedPayload, recommended_role: input.recommendedRole ?? null },
+    enrichedPayload,
+    enrichedNoRadar,
+    corePayload,
+  ];
+  let data: unknown = null;
+  let error: { message?: string } | null = null;
+  for (const payload of attempts) {
+    const res = await supabase
+      .from('analysis_results')
+      .insert(payload)
+      .select()
+      .single();
+    if (!res.error) {
+      data = res.data;
+      error = null;
+      break;
+    }
+    error = res.error;
+  }
   if (error) throw error;
   return data;
 }

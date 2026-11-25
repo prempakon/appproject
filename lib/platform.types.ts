@@ -34,6 +34,8 @@ export interface Job {
   created_at?: string;
   company?: Company | null;
   isDemo?: boolean;
+  /** 'live-api' for postings fetched live from SerpApi Google Jobs Thailand. */
+  source?: string;
 }
 
 export interface ResumeExperience {

@@ -94,6 +94,21 @@
 
 ---
 
+## 8.1 Module N — Unified 3-Tier AI Analysis Layout (2026-11-25)
+
+| # | Check | Expected | Result | File ที่ตรวจสอบ | หลักฐาน |
+|---|-------|----------|--------|-----------------|----------|
+| TC-10.1 | Shared single entry point | `/main` และ `ResultModal` ต้อง render โครงเดียวกันจาก component เดียว | **[FIXED & PASS]** | `components/AnalysisResultView.tsx` | `AnalysisResultView` ประกอบ Tier 1+2+3; `app/main/page.tsx` และ `app/components/ResultModal.tsx` import จากไฟล์เดียวกัน; `app/components/AnalysisResultTiers.tsx` ถูกลบแล้ว |
+| TC-10.2 | Legacy 3-Bar removed | ต้องไม่มี `ทักษะเฉพาะทาง (Technical)` / `ทักษะทั่วไป (Soft Skills)` / `การบริหารจัดการ (Management)` | **[PASS]** | `app/main/page.tsx`, `app/components/ResultModal.tsx` | `Select-String` ไม่พบข้อความ legacy ในสองไฟล์; มีแต่ `AnalysisResultView` เท่านั้น |
+| TC-10.3 | Tier 1 Career Match Banner | การ์ด `สรุปสายงานที่สอดคล้อง` + ไอคอนกระเป๋าน้ำเงิน + ชื่อสายงาน + meta + action | **[PASS]** | `components/AnalysisResultView.tsx` (`CareerMatchBanner`) | `/main` ส่ง `ดูผลฉบับเต็ม`; Modal ส่ง `ดาวน์โหลด PDF` และ `bannerMeta` (`วิเคราะห์เมื่อ … · N ไฟล์: …`) |
+| TC-10.4 | Tier 2 grid layout | `grid-cols-1 lg:grid-cols-12 gap-6 items-center`; ซ้าย `lg:col-span-5`, ขวา `lg:col-span-7` และ `grid-cols-1 sm:grid-cols-2 gap-3` | **[FIXED & PASS]** | `components/AnalysisResultView.tsx` (`AnalysisRadarGrid`) | คลาสตรงตามสเปกทุกตัว; การ์ด 6 ใบมี badge `X/100`, progress bar และคำอธิบาย |
+| TC-10.5 | RadarChart labels | แกนภาษาไทยทั้ง 6 ไม่ถูกขอบ SVG ตัด | **[PASS]** | `app/components/RadarChart.tsx` | `padX = 34%`, `padY = 14%`, `viewBox` กว้างกว่าฐาน และ `textLength` cap ต่อป้าย; labelPoint อยู่ที่ 1.5 เท่าของ radius |
+| TC-10.6 | Tier 3 tag cloud | `ทักษะที่ตรวจพบจากเอกสาร` + badge `X ทักษะ` + ป้ายน้ำเงิน + empty state | **[PASS]** | `components/AnalysisResultView.tsx` (`DetectedSkillsCloud`) | `safeSkills.length` ใช้ทั้ง badge และค่าว่าง; ป้าย `bg-blue-50 text-blue-700 border-blue-100` |
+| TC-10.7 | Legacy row normalization | ประวัติเก่าต้องไม่แสดง `0%`/`undefined` | **[FIXED & PASS]** | `components/AnalysisResultView.tsx` (`normalizeScoreDimensions`) | clamp 0–100 ทุกแกน; เติม `accuracy`/`communication`/`creativity` จากค่าที่มีอยู่เมื่อ JSON ขาด |
+| TC-10.8 | Build & lint | `npx tsc --noEmit`, `npm run lint`, `npm run build` | **[PASS]** | ทั้งโปรเจกต์ | `tsc` exit 0; `lint` 0 errors (7 pre-existing warnings); `build` exit 0 (Next.js 16.3.6 / Turbopack) |
+
+---
+
 ## 9. Critical Findings & Pending Actions
 
 ### ความผิดพลักพิงที่พบและแก้ไครแล้ว ✅
@@ -104,6 +119,7 @@
 4. **Category system shared** — `lib/portfolio.ts` เป็นต้นทางเดียวของ `PORTFOLIO_CATEGORIES`, `computeFileSha256`, และ helpers ทั้ง 5 หน่วยงาน
 5. **5MB validation all the way** — ตั้งแต่หน้า upload จนถึงการส่งไป API ยืนยันขนาดไม่เกิน 5 MB ทุกทาง
 6. **Move Category Popup Modal** — ลบ `<select>` ย้ายหมวดหมู่ออกจาก toolbar/การ์ดแล้วใช้ modal `ย้ายหมวดหมู่ไฟล์` เดียวกันสำหรับย้ายรายใบและหลายรายการ พร้อมอัปเดต `portfolios` แบบ scoped `user_id` และ sync จำนวนหมวดทันที
+7. **Unified 3-Tier AI Analysis Layout** — รวมศูนย์ที่ `components/AnalysisResultView.tsx`, ลบ Legacy 3-Bar ออกทั้ง `/main` และ `ResultModal`, จัดกริด Tier 2 ตามสเปก (`lg:grid-cols-12` + `lg:col-span-5/7`), และเพิ่ม `normalizeScoreDimensions()` กันประวัติเก่าแสดง `0%`/`undefined`
 
 ### การดำเนินการที่ยังไม่บังคับ (แต่บันทึกไว้)
 
@@ -118,7 +134,7 @@
 |-----------|-------------|----------|
 | `npx tsc --noEmit` | **PASS** | ไม่มีข้อผิดพลาดประเภท TypeScript |
 | `npm run build` | **PASS** | Build Next.js 16.3.6 ผ่านสำเร็จ 22 routes |
-| TC-01 ถึง TC-25 + TC-05 (Portfolio Spec) | **PASS ทั้งหมด** | ครอบคลุมทุก user journey, category, dedup, auth, UI และ Move Category modal |
+| TC-01 ถึง TC-25 + TC-05 (Portfolio Spec) + TC-10 (Module N) | **PASS ทั้งหมด** | ครอบคลุมทุก user journey, category, dedup, auth, UI, Move Category modal และ 3-Tier AI Layout |
 | ข้อบกพร่องที่แก้ไข | **FIXED & PASS** | Stock photos, duplicate upload, AI reuse, categories รวมกัน |
 | ข้อบกพร่องที่ยังไม่ได้บังคับ | **N/A (บันทึกไว้)** | ต้องรัน SQL ใน Supabase Editor |
 

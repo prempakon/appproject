@@ -5,7 +5,6 @@ export interface AnalysisLike {
   skills: string[];
   career: string | null;
   career_en: string | null;
-  career_category?: string | null;
   technical: number;
   soft: number;
   management: number;
@@ -71,25 +70,39 @@ export function buildScoreSnapshot(analyses: AnalysisLike[], resume: ResumeData 
 export function buildSkillFrequency(
   analyses: AnalysisLike[],
   resume: ResumeData | null,
-): { skill: string; count: number }[] {
-  const tally = new Map<string, { label: string; count: number }>();
-  const add = (skill: string, weight: number) => {
+): { skill: string; count: number; documents: number }[] {
+  // Unique-skill union: a skill detected in N history records counts once,
+  // with `documents` recording how many distinct sources evidenced it —
+  // repeated runs of the same analysis no longer inflate the tally.
+  const tally = new Map<string, { label: string; docs: Set<number> }>();
+  const add = (skill: string, docId: number) => {
     const clean = skill.trim();
     if (!clean) return;
     const key = clean.toLowerCase();
     const current = tally.get(key);
-    tally.set(key, { label: current?.label ?? clean, count: (current?.count ?? 0) + weight });
+    if (current) {
+      current.docs.add(docId);
+    } else {
+      tally.set(key, { label: clean, docs: new Set([docId]) });
+    }
   };
 
-  analyses.slice(0, 10).forEach((analysis) => {
-    (analysis.skills ?? []).forEach((skill) => add(skill, 1));
+  analyses.slice(0, 10).forEach((analysis, index) => {
+    const seenInRecord = new Set<string>();
+    (analysis.skills ?? []).forEach((skill) => {
+      const key = skill.trim().toLowerCase();
+      if (!key || seenInRecord.has(key)) return;
+      seenInRecord.add(key);
+      add(skill, index);
+    });
   });
-  (resume?.skills ?? []).forEach((skill) => add(skill, 2));
+  // The resume draft counts as one additional evidence source.
+  (resume?.skills ?? []).forEach((skill) => add(skill, 100));
 
   return [...tally.values()]
-    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
-    .slice(0, 8)
-    .map((entry) => ({ skill: entry.label, count: entry.count }));
+    .map((entry) => ({ skill: entry.label, count: entry.docs.size, documents: entry.docs.size }))
+    .sort((a, b) => b.count - a.count || a.skill.localeCompare(b.skill))
+    .slice(0, 8);
 }
 
 export interface CareerReadiness {

@@ -16,7 +16,7 @@ import {
   readinessSummary,
   type AnalysisLike,
 } from '../../lib/careerAnalytics';
-import type { ResumeData } from '../../lib/platform.types';
+import type { ResumeData, ScoreDimensions } from '../../lib/platform.types';
 import type { MyAnalysisRow } from '../../lib/profiles';
 
 const RADAR_LABELS = [
@@ -35,6 +35,7 @@ export default function AnalyticsPage() {
   const [jobs, setJobs] = useState<Awaited<ReturnType<typeof loadJobBoard>>['jobs']>([]);
   const [loading, setLoading] = useState(true);
   const [signedIn, setSignedIn] = useState(false);
+  const [scoreMode, setScoreMode] = useState<'latest' | 'peak'>('latest');
 
   // --- Auth check: redirect unauthenticated visitors immediately ---
   useEffect(() => {
@@ -114,25 +115,47 @@ export default function AnalyticsPage() {
     [analyses, resume],
   );
 
+  // Peak-per-axis mode: max score each dimension ever reached across analysis
+  // history, so repeated runs never drag the radar down through averaging.
+  const peakDims = useMemo<ScoreDimensions | null>(() => {
+    if (analyses.length === 0) return null;
+    const axes = ['technical', 'soft', 'management', 'accuracy', 'communication', 'creativity'] as const;
+    const out = {} as Record<(typeof axes)[number], number>;
+    for (const axis of axes) out[axis] = 0;
+    for (const row of analyses) {
+      const r = row.radar_scores;
+      for (const axis of axes) {
+        const n = typeof r?.[axis] === 'number' ? (r?.[axis] as number) : NaN;
+        if (Number.isFinite(n)) {
+          out[axis] = Math.max(out[axis], Math.min(100, Math.max(0, Math.round(n))));
+        }
+      }
+    }
+    return out;
+  }, [analyses]);
+
+  const activeDims: ScoreDimensions =
+    scoreMode === 'peak' && peakDims ? peakDims : snapshot;
+
   const radarValues = [
-    snapshot.technical,
-    snapshot.soft,
-    snapshot.management,
-    snapshot.accuracy,
-    snapshot.communication,
-    snapshot.creativity,
+    activeDims.technical,
+    activeDims.soft,
+    activeDims.management,
+    activeDims.accuracy,
+    activeDims.communication,
+    activeDims.creativity,
   ];
   const latestAnalysis = analyses.length > 0 ? analyses[0] : null;
   const hasData = Boolean(latestAnalysis || resume);
   const maxFrequency = frequency[0]?.count ?? 1;
 
   const statCards = [
-    { label: 'คะแนนทักษะเทคนิค', value: snapshot.technical, tone: 'bg-blue-500' },
-    { label: 'คะแนนทักษะทั่วไป', value: snapshot.soft, tone: 'bg-violet-500' },
-    { label: 'คะแนนการบริหารจัดการ', value: snapshot.management, tone: 'bg-indigo-500' },
-    { label: 'ความน่าเชื่อถือของข้อมูล', value: snapshot.accuracy, tone: 'bg-emerald-500' },
-    { label: 'คะแนนการสื่อสาร', value: snapshot.communication, tone: 'bg-amber-500' },
-    { label: 'คะแนนความคิดสร้างสรรค์', value: snapshot.creativity, tone: 'bg-purple-500' },
+    { label: 'คะแนนทักษะเทคนิค', value: activeDims.technical, tone: 'bg-blue-500' },
+    { label: 'คะแนนทักษะทั่วไป', value: activeDims.soft, tone: 'bg-violet-500' },
+    { label: 'คะแนนการบริหารจัดการ', value: activeDims.management, tone: 'bg-indigo-500' },
+    { label: 'ความน่าเชื่อถือของข้อมูล', value: activeDims.accuracy, tone: 'bg-emerald-500' },
+    { label: 'คะแนนการสื่อสาร', value: activeDims.communication, tone: 'bg-amber-500' },
+    { label: 'คะแนนความคิดสร้างสรรค์', value: activeDims.creativity, tone: 'bg-purple-500' },
   ];
 
   return (
@@ -200,6 +223,30 @@ export default function AnalyticsPage() {
                 {latestAnalysis ? new Date(latestAnalysis.analyzed_at).toLocaleDateString('th-TH') : 'เรซูเม่'}
               </span>
             </div>
+
+            {analyses.length > 0 && (
+              <div className="mt-4 inline-flex rounded-full border border-slate-200 bg-slate-50 p-1">
+                {(
+                  [
+                    { value: 'latest', label: 'คะแนนล่าสุด (Latest)' },
+                    { value: 'peak', label: 'คะแนนสูงสุดรายด้าน (Peak per Axis)' },
+                  ] as const
+                ).map((mode) => (
+                  <button
+                    key={mode.value}
+                    type="button"
+                    onClick={() => setScoreMode(mode.value)}
+                    className={`rounded-full px-3.5 py-1.5 text-[11px] font-extrabold transition-colors ${
+                      scoreMode === mode.value
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-slate-500 hover:text-blue-700'
+                    }`}
+                  >
+                    {mode.label}
+                  </button>
+                ))}
+              </div>
+            )}
 
             <div className="mt-4 grid items-center gap-6 md:grid-cols-[280px_minmax(0,1fr)]">
               <div className="mx-auto w-full max-w-[320px]">
@@ -323,7 +370,14 @@ export default function AnalyticsPage() {
                   <div key={item.skill}>
                     <div className="mb-1 flex items-center justify-between text-xs font-bold">
                       <span className="truncate text-slate-700">{item.skill}</span>
-                      <span className="ml-2 flex-shrink-0 text-slate-400">{item.count}</span>
+                      <span className="ml-2 flex shrink-0 items-center gap-1.5">
+                        {item.documents > 1 && (
+                          <span className="rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-[9px] font-extrabold text-blue-700">
+                            พบใน {item.documents} เอกสาร
+                          </span>
+                        )}
+                        <span className="text-slate-400">{item.count}</span>
+                      </span>
                     </div>
                     <div className="h-2 rounded-full bg-slate-100">
                       <div

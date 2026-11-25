@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { AnalysisRadarGrid, CareerMatchBanner, DetectedSkillsCloud } from './AnalysisResultTiers';
+import { AnalysisResultView } from '../../components/AnalysisResultView';
 import type { ScoreDimensions } from '../../lib/platform.types';
 
 function clampScore(value: unknown, fallback: number) {
@@ -16,7 +16,6 @@ interface ResultModalProps {
     skills: string[];
     career: string | null;
     careerEn?: string | null;
-    careerCategory?: string | null;
     accuracy: number;
     technical: number;
     soft: number;
@@ -76,6 +75,12 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
   const textWarning = analysis?.textWarning?.trim() ? analysis.textWarning.trim() : null;
   const lowConfidence = accuracy < 30;
   const modelName = analysis?.model?.trim() ? analysis.model.trim() : null;
+  const bannerMeta = [
+    `วิเคราะห์เมื่อ ${analyzedLabel}`,
+    files.length > 0 ? `${files.length} ไฟล์: ${files.map((file) => file.name).join(', ')}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   const downloadPdf = async () => {
     if (!reportRef.current || downloading) return;
@@ -201,35 +206,16 @@ export default function ResultModal({ isOpen, onClose, files, analyzedAt, analys
             </p>
           )}
           
-          {/* สรุปสายงานที่สอดคล้อง — Tier 1 Career Match Banner */}
-          <section>
-            <h4 className="text-sm font-extrabold text-slate-800 mb-4">สรุปสายงานที่สอดคล้อง</h4>
-            <CareerMatchBanner
-              career={analysis.career}
-              careerEn={analysis.careerEn}
-              action={
-                <button
-                  onClick={downloadPdf}
-                  disabled={downloading}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-slate-800 disabled:opacity-60"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3.5 h-3.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                  </svg>
-                  {downloading ? 'กำลังสร้าง PDF...' : 'ดาวน์โหลด PDF'}
-                </button>
-              }
-            />
-          </section>
-
-          {/* ระดับทักษะรายด้าน — Tier 2 RadarChart + 6 skill cards */}
-          <section>
-            <h4 className="text-sm font-extrabold text-slate-800 mb-4">ระดับทักษะรายด้าน</h4>
-            <AnalysisRadarGrid scores={radarScores} skillNotes={analysis.skillNotes} chartSize={340} />
-          </section>
-
-          {/* ทักษะที่ตรวจพบ — Tier 3 Detected Skills Tag Cloud */}
-          <DetectedSkillsCloud skills={skills} />
+          {/* Unified 3-Tier AI Analysis Layout — Tier 1 + Tier 2 + Tier 3 */}
+          <AnalysisResultView
+            career={analysis.career}
+            careerEn={analysis.careerEn}
+            scores={radarScores}
+            skills={skills}
+            skillNotes={analysis.skillNotes}
+            meta={bannerMeta}
+            chartSize={340}
+          />
 
           {/* ข้อมูลประกอบการวิเคราะห์ */}
           {rawInput && (

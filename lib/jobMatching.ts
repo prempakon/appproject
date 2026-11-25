@@ -96,8 +96,27 @@ export function computeJobMatch(job: Job, context: MatchContext): JobMatch {
   const { matched, missing } = matchSkills(userSkills, job.required_skills ?? []);
   const nice = matchSkills(userSkills, job.nice_to_have ?? []).matched;
 
+  // Universal text matching: a user skill (ANY domain/language) found in the
+  // job's title, company, or description counts as evidence even when the
+  // posting has no structured required_skills list.
+  const matchedSet = new Set(matched.map(canonicalSkill));
+  const hay = normalizeSkill(
+    `${job.title} ${job.company?.name ?? ''} ${job.description ?? ''} ${job.employment_type ?? ''}`,
+  );
+  const hayPadded = ` ${hay} `;
+  for (const skill of userSkills) {
+    const key = canonicalSkill(skill);
+    if (!key || matchedSet.has(key)) continue;
+    const hasThai = /[\u0e00-\u0e7f]/.test(key);
+    const found = hasThai ? hay.includes(key) : hayPadded.includes(` ${key} `);
+    if (found) {
+      matchedSet.add(key);
+      matched.push(skill);
+    }
+  }
+
   const requiredCount = Math.max(1, job.required_skills?.length ?? 0);
-  const skillRatio = matched.length / requiredCount;
+  const skillRatio = Math.min(1, matched.length / requiredCount);
   const skillScore = Math.round(skillRatio * 100);
 
   let score = skillRatio * 65;

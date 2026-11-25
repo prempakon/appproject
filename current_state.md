@@ -1,7 +1,7 @@
 # Current State — ProjectApp (LRU Portfolio)
 
 > Snapshot date: 2026-11-14 (analysis baseline)
-> Last updated: 2026-11-20 — module completion tracker (A–M), navbar/profile restoration, production status
+> Last updated: 2026-11-25 — Module N 3-tier AI analysis UI, RadarChart audit, production verification
 > Scope: living status document — baseline analysis plus implemented modules.
 > Repository: `D:\appproject\projectapp`
 
@@ -231,7 +231,7 @@ Defined in `supabase/schema.sql` plus additive migrations.
   - Existing gallery file → reuse the existing `portfolio_id`.
   - Then insert one `analysis_results` row per file.
 - Failures are partially tolerated: one file failing to save is skipped; analysis result can still be shown, and a save failure surfaces a Thai notice.
-- Results appear inline as the **Unified 3-Tier AI Analysis Layout** — Tier 1 `สรุปสายงานที่สอดคล้อง` Career Match Banner (recommended role + `วิเคราะห์เมื่อ`/file metadata + `ดูผลฉบับเต็ม`), Tier 2 2-column RadarChart (6 axes, unclipped Thai labels) + 2x3 grid of 6 skill cards (`X/100` badges, mini bars, notes), Tier 3 `ทักษะที่ตรวจพบจากเอกสาร` tag cloud — all shared via `app/components/AnalysisResultTiers.tsx`; `ResultModal` renders the identical tiers with a `ดาวน์โหลด PDF` action in the banner. **"ประวัติการวิเคราะห์"** opens a slide-over drawer that lists the 20 most recent analyses with loading/error states, and clicking an item loads it into the same 3-tier view.
+- Results appear inline as the **Unified 3-Tier AI Analysis Layout** — Tier 1 `สรุปสายงานที่สอดคล้อง` Career Match Banner (recommended role + `วิเคราะห์เมื่อ`/file metadata + `ดูผลฉบับเต็ม`), Tier 2 2-column RadarChart (6 axes, unclipped Thai labels) + 2x3 grid of 6 skill cards (`X/100` badges, mini bars, notes), Tier 3 `ทักษะที่ตรวจพบจากเอกสาร` tag cloud — all shared via `components/AnalysisResultView.tsx`; `ResultModal` renders the identical tiers with a `ดาวน์โหลด PDF` action in the banner. **"ประวัติการวิเคราะห์"** opens a slide-over drawer that lists the 20 most recent analyses with loading/error states, and clicking an item loads it into the same 3-tier view.
 - Gallery header is a single-row toolbar: title + `ดูรูปทั้งหมด (N) →` on the left; `หมวดหมู่:` select, `เลือกรายการ`, and `+ เพิ่มรูปสู่คลัง` on the right. The gallery section shows the 6 newest files, supports selecting several and sending them to analysis, and direct upload to the gallery without analysis.
 
 ### 6.3 AI analysis (`POST /api/analyze`)
@@ -275,7 +275,7 @@ Defined in `supabase/schema.sql` plus additive migrations.
 
 ### 6.4 Result modal (`ResultModal.tsx`)
 - Career summary (maps the 6 English careers to Thai labels).
-- Unified 3-tier layout shared with `/main` via `app/components/AnalysisResultTiers.tsx`: Career Match Banner (with `ดาวน์โหลด PDF` action), 6-axis RadarChart + 6 skill cards, and the detected-skills tag cloud. The legacy 3-bar horizontal progress layout is removed.
+- Unified 3-tier layout shared with `/main` via `components/AnalysisResultView.tsx`: Career Match Banner (with `ดาวน์โหลด PDF` action), 6-axis RadarChart + 6 skill cards, and the detected-skills tag cloud. The legacy 3-bar horizontal progress layout is removed.
 - Skill chips, raw input + text warning, irrelevant-file warnings, low-confidence banner.
 - Model badge, including a hint when a `lite` fallback model was used.
 - **PDF export** renders the modal with `html2canvas-pro` at 2× and slices it into A4 pages with `jsPDF`, hiding buttons, temporarily expanding scroll containers, and waiting for fonts.
@@ -475,7 +475,7 @@ Scope: landing page, resume + QR, job matching, and career analytics. **No payme
 | K | — | ⚪ Not defined | No Module K exists in the repo |
 | L | — | ⚪ Not defined | No Module L exists in the repo |
 | M | Unified "ย้ายหมวดหมู่ไฟล์" Popup Modal + category management | ✅ Complete | `app/main/page.tsx`, `app/gallery/page.tsx` — remove inline `<select>` dropdowns, unified `moveModal` dialog with 4 radio-category options from `lib/portfolio.ts`, SHA-256 dedup, 5MB upload limit, Storage + DB deletion with `.eq('user_id', user.id)` RLS filters, `assignCategories` + Thai success notice; batch toolbar: "เลือกทั้งหมด", "ย้ายหมวดหมู่ที่เลือก (N)", "ลบรูปที่เลือก (N)"; image cards: category badge + "ย้ายหมวด" + Delete buttons |
-| N | Unified 3-Tier AI Analysis Layout + RadarChart label fix | ✅ Complete | `app/components/AnalysisResultTiers.tsx` (shared CareerMatchBanner / AnalysisRadarGrid / DetectedSkillsCloud), `app/components/RadarChart.tsx` (symmetric padded viewBox + per-label textLength cap — no clipped Thai axis labels), `app/main/page.tsx`, `app/components/ResultModal.tsx`; legacy 3-bar layout deleted; specs updated in `upgrade_spec.md` Module N and `qa_spec.md` TC-10 |
+| N | Unified 3-Tier AI Analysis Layout + RadarChart label fix | ✅ Complete | `components/AnalysisResultView.tsx` (shared `AnalysisResultView` composing CareerMatchBanner / AnalysisRadarGrid / DetectedSkillsCloud + `normalizeScoreDimensions`), `app/components/RadarChart.tsx` (symmetric padded viewBox + per-label textLength cap — no clipped Thai axis labels), `app/main/page.tsx`, `app/components/ResultModal.tsx`; legacy 3-bar layout deleted; specs updated in `upgrade_spec.md` Module N and `qa_spec.md` TC-10 |
 
 ### 11.3 Module M — Unified "ย้ายหมวดหมู่ไฟล์" Popup Modal (2026-11-24)
 
@@ -502,3 +502,26 @@ Scope: landing page, resume + QR, job matching, and career analytics. **No payme
 - **QA documentation:** `qa_report.md` บันทึกทุกเงื่อนไข TC-01 ถึง TC-25 ครบถ้วน พร้อมหลักฐานทางเทคนิคทุกรายการ; `TC-05` ผ่านการตรวจสอบแล้วสอดคล้องกับ Module M Work — ย้ายหมวดหมู่ผ่าน Popup Modal ทั้งรายการเดียวและหลายรายการ, notมี `<select>` บน toolbar/การ์ด, modal แสดง `N รายการ` + 4 หมวดปลายทาง, confirm อัปเดต DB/local state/counts
 
 ### 11.6 Production status (2026-11-24)
+
+- **Build health:** `npx tsc --noEmit` pass, `npm run lint` pass (0 errors, pre-existing warnings only), `npm run build` pass (Next.js 16.3.6 / Turbopack, 19 static routes + dynamic `/api/analyze`, `/api/jobs`, `/resume/[id]`).
+- **3-Tier UI entry point:** `components/AnalysisResultView.tsx` is the single shared component rendered by both the `/main` active-analysis section and `app/components/ResultModal.tsx`; `app/components/AnalysisResultTiers.tsx` was removed.
+- **Legacy 3-bar layout:** confirmed deleted — no `ทักษะเฉพาะทาง (Technical)` / `ทักษะทั่วไป (Soft Skills)` / `การบริหารจัดการ (Management)` progress rows remain in `/main` or the analysis modal.
+- **Normalization:** `normalizeScoreDimensions()` clamps every axis to 0–100 and derives `communication`/`creativity`/`accuracy` for legacy rows whose `radar_scores` JSON is partial or null, preventing `0%`/`undefined`/`NaN` output.
+
+### 11.7 Module N completion (2026-11-25)
+
+- Phase 0 audit confirmed the existing 6-axis `app/components/RadarChart.tsx` and its padded viewBox reuse without new dependencies.
+- `components/AnalysisResultView.tsx` now provides Tier 1 (`สรุปสายงานที่สอดคล้อง` banner with role, metadata, action slot), Tier 2 (`grid-cols-1 lg:grid-cols-12 gap-6 items-center`; left `lg:col-span-5` radar, right `lg:col-span-7` `grid-cols-1 sm:grid-cols-2 gap-3` six skill cards), and Tier 3 (`ทักษะที่ตรวจพบจากเอกสาร` with `X ทักษะ` count badge).
+- `app/main/page.tsx` passes the `ดูผลฉบับเต็ม` action; `app/components/ResultModal.tsx` passes `ดาวน์โหลด PDF` (same html2canvas-pro/jsPDF pipeline, `data-pdf-hide` footer preserved).
+- Verification: `npx tsc --noEmit` exit 0, `npm run lint` 0 errors, `npm run build` exit 0.
+
+### 11.8 Module O completion (2026-11-25)
+
+- Phase 0 audit confirmed existing schemas/types; no silent `catch {}` added, all async UI states (skeleton/loading/error/empty) implemented.
+- DB: `supabase/migrations/20261125_job_search_cache.sql` verified complete (`job_search_cache` + RLS + authenticated policies); new `supabase/migrations/20261125_analysis_job_fields.sql` adds `recommended_role`/`job_keywords` to `analysis_results` (manual SQL Editor run required).
+- `app/api/analyze/route.ts`: Gemini prompt now emits `recommended_role` (TH) + `job_keywords` (3–5 EN/TH synonyms + stack) with a Thai→English fallback map for legacy rows; duplicate-run guard via `forceReanalyze` + sorted `fileIds`/`portfolio_id` match returns `{ cachedAnalysis: true }` without Gemini call or duplicate insert.
+- `app/api/jobs/route.ts`: new `role`/`keywords`/`level`/`forceRefresh` branch — 24h `job_search_cache` lookup (`query_key = primaryEnglishRole:level`), live JSearch RapidAPI fetch with dedupe/normalize/upsert, and unconditional `fallbackLinks` (Google Jobs, LinkedIn, JobsDB TH, JobThai, Blognone); never returns HTTP 500. Shared helpers in `lib/jobSearch.ts`. Existing DB listing GET path preserved.
+- UI: `app/components/RadarChart.tsx` rewritten to `viewBox 0 0 460 340` (cx=230, cy=170, maxRadius=115, labels at radius 132, fontSize 13/600, correct anchors); duplicate dark PDF button removed from `AnalysisResultView` banner and `ResultModal`; new `components/JobRecommendationsSection.tsx` (filter pills, keyword chips, cache badge, refresh, skeletons, job cards, 5-platform search bar) wired into `app/main/page.tsx` with un-analyzed Empty State + Quick Explore chips and `วิเคราะห์ใหม่ (บังคับ)` button; `lib/profiles.ts` `listMyAnalyses` now selects `recommended_role`/`job_keywords`.
+- Analytics: `/analytics` radar defaults to latest analysis with `คะแนนล่าสุด (Latest)` / `คะแนนสูงสุดรายด้าน (Peak per Axis)` toggle; `buildSkillFrequency` dedupes skills case-insensitively across history with `พบใน N เอกสาร` evidence badge.
+- Verification: `npx tsc --noEmit` exit 0, `npm run lint` 0 errors (pre-existing warnings only), `npm run build` exit 0.
+- Pending manual step: run both new migrations in Supabase SQL Editor; set `RAPIDAPI_KEY` for live JSearch (fallback links work without it).
